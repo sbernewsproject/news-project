@@ -29,14 +29,14 @@ ARTICLE = Article(
 
 
 def main() -> None:
-    print("=== Шаг 1: чанкинг ===")
+    print(" Шаг 1: чанкинг ")
     chunks = chunk_article(ARTICLE)
     print(f"  Чанков: {len(chunks)}")
     for c in chunks:
         print(f"  [{c.position}] hash={c.content_hash}  len={len(c.text)}")
         print(f"       {c.text[:80]!r}...")
 
-    print("\n=== Шаг 2: индексация (in-memory Qdrant) ===")
+    print("\n Шаг 2: индексация (in-memory Qdrant) ")
     indexer = NewsIndexer()  # без URL → in-memory
 
     # Имитируем chunk_id, которые Postgres выдал бы через BIGSERIAL
@@ -54,7 +54,7 @@ def main() -> None:
     indexer.index(indexable)
     print(f"  Проиндексировано: {len(indexable)} чанков")
 
-    print("\n=== Шаг 3: поиск ===")
+    print("\n Шаг 3: поиск ")
     query = "ключевая ставка Банк России"
     results = indexer.search(query, top_k=3)
     print(f"  Запрос: {query!r}")

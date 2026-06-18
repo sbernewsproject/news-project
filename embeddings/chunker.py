@@ -26,7 +26,8 @@ class Chunk:
     text: str
     content_hash: str
 
-
+# здесь определяются метаданные в векторной БД, то что мы подаем в payload
+# используем recursive character split тут можно поиграться с тем какой способ делать
 def chunk_article(article: Article) -> list[Chunk]:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
