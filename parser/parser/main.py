@@ -85,7 +85,8 @@ def save_results(site_dir: str, articles: list) -> None:
 
 
 def cmd_sitemap(cfg: dict, site_dir: str, limit: int = 0, fresh: bool = False) -> None:
-    links = collect_links(cfg, site_dir, limit=limit, fresh=fresh)
+    collect_fn = cfg.get("collect_links", collect_links)
+    links = collect_fn(cfg, site_dir, limit=limit, fresh=fresh)
     if links:
         print("sample urls:")
         for l in links[:3]:
