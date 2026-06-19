@@ -1,1 +1,26 @@
- 
+# --- parsing ---
+httpx>=0.27
+trafilatura>=1.8
+
+# --- NLP / RAG ---
+gliner>=0.2
+langchain-text-splitters>=0.3
+sentence-transformers>=3.0
+qdrant-client>=1.9
+graph_ragu @ file:///Users/Seva/RAGU
+
+# --- database ---
+asyncpg>=0.29
+psycopg2-binary>=2.9
+
+# --- API ---
+fastapi>=0.111
+uvicorn[standard]>=0.30
+pydantic>=2.7
+aiofiles>=23.0
+
+# --- frontend ---
+streamlit>=1.35
+
+# --- utils ---
+python-dotenv>=1.0

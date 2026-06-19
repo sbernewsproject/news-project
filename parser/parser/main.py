@@ -24,8 +24,11 @@
 import importlib.util
 import json
 import os
+import random
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,7 +37,8 @@ sys.path.insert(0, _HERE)
 from sitemap import collect_links
 from article import fetch_article as _default_fetch_article
 
-DELAY = 1.0
+DELAY   = 1.0
+WORKERS = 5
 
 
 def load_site_config(site_dir: str) -> dict:
@@ -81,7 +85,8 @@ def save_results(site_dir: str, articles: list) -> None:
 
 
 def cmd_sitemap(cfg: dict, site_dir: str, limit: int = 0, fresh: bool = False) -> None:
-    links = collect_links(cfg, site_dir, limit=limit, fresh=fresh)
+    collect_fn = cfg.get("collect_links", collect_links)
+    links = collect_fn(cfg, site_dir, limit=limit, fresh=fresh)
     if links:
         print("sample urls:")
         for l in links[:3]:
@@ -124,41 +129,53 @@ def cmd_parse(cfg: dict, site_dir: str, limit: int = 0, fresh: bool = False) -> 
         todo = todo[:limit]
         print(f"limit: {limit} articles")
 
-    print(f"starting: {len(todo)} articles")
+    print(f"starting: {len(todo)} articles (workers={WORKERS})")
 
     start      = datetime.now()
     ok, fail   = 0, 0
+    done       = 0
     failed_log = os.path.join(site_dir, "failed_urls.txt")
+    lock       = threading.Lock()
 
-    for i, url in enumerate(todo, 1):
-        slug = url.replace(cfg["url_prefix"], "")
-        print(f"[{i}/{len(todo)}] {slug[:80]}")
+    def _fetch(url):
+        time.sleep(DELAY + random.uniform(0, 0.5))
+        return url, fetch_fn(url)
 
-        article = fetch_fn(url)
+    with ThreadPoolExecutor(max_workers=WORKERS) as executor:
+        futures = {executor.submit(_fetch, url): url for url in todo}
 
-        if article and "error" not in article:
-            articles.append({**article, "parsed_at": datetime.now().isoformat()})
-            ok += 1
-            body_len = article.get("body_length", len(article.get("body", "") or ""))
-            print(f"  ok: {article.get('title', '')[:55]} ({body_len} chars)")
-        else:
-            fail += 1
-            err = article.get("error", "") if article else ""
-            print(f"  failed{': ' + err if err else ''}")
-            with open(failed_log, "a", encoding="utf-8") as f:
-                f.write(url + "\n")
+        for future in as_completed(futures):
+            url = futures[future]
+            slug = url.replace(cfg["url_prefix"], "")
 
-        processed.add(url)
-        if not fresh:
-            save_progress(site_dir, list(processed), articles)
-            save_results(site_dir, articles)
+            try:
+                _, article = future.result()
+            except Exception as e:
+                article = {"error": str(e)}
 
-        if i % 10 == 0:
-            elapsed = (datetime.now() - start).total_seconds()
-            rate    = i / elapsed if elapsed > 0 else 0
-            print(f"  progress: {i}/{len(todo)}, ok={ok}, fail={fail}, {rate:.1f}/sec")
+            with lock:
+                done += 1
+                if article and "error" not in article:
+                    articles.append({**article, "parsed_at": datetime.now().isoformat()})
+                    ok += 1
+                    body_len = article.get("body_length", len(article.get("body", "") or ""))
+                    print(f"[{done}/{len(todo)}] ok: {article.get('title', '')[:55]} ({body_len} chars)")
+                else:
+                    fail += 1
+                    err = article.get("error", "") if article else ""
+                    print(f"[{done}/{len(todo)}] failed {slug[:60]}{': ' + err if err else ''}")
+                    with open(failed_log, "a", encoding="utf-8") as f:
+                        f.write(url + "\n")
 
-        time.sleep(DELAY)
+                processed.add(url)
+                if not fresh:
+                    save_progress(site_dir, list(processed), articles)
+                    save_results(site_dir, articles)
+
+                if done % 10 == 0:
+                    elapsed = (datetime.now() - start).total_seconds()
+                    rate    = done / elapsed if elapsed > 0 else 0
+                    print(f"  progress: {done}/{len(todo)}, ok={ok}, fail={fail}, {rate:.1f}/sec")
 
     if fresh:
         save_progress(site_dir, list(processed), articles)
