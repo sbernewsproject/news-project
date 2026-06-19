@@ -1,78 +1,83 @@
-"""
-Строит и сохраняет граф знаний из текстов статей через LightRAG.
-LightRAG вызывает Ollama для извлечения сущностей и связей, затем
-записывает граф на диск в GRAPH_WORKING_DIR.
-Передавать сюда нужно полные тексты статей — LightRAG сам делает чанкинг внутри.
-"""
-
 import asyncio
 import os
-from pathlib import Path
 from typing import Optional
 
-from lightrag import LightRAG, QueryParam
-from lightrag.llm.ollama import ollama_model_complete
-from lightrag.utils import EmbeddingFunc
-from sentence_transformers import SentenceTransformer
+from ragu import KnowledgeGraph, BuilderArguments, Settings, SimpleChunker
+from ragu.models.embedder import EmbedderOpenAI
+from ragu.models.llm import LLMOpenAI
+from ragu.models.openai import CachedAsyncOpenAI
+from ragu.triplet import RaguLmArtifactExtractor
 
-WORKING_DIR = os.getenv("GRAPH_WORKING_DIR", "./ragu_working_dir")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:32b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:32b")
+RAGU_LM_MODEL = os.getenv("RAGU_LM_MODEL", "ragu-lm")
 
-# Синглтоны уровня модуля — инициализируются один раз на процесс
-_embed_model: Optional[SentenceTransformer] = None
-_rag_instance: Optional[LightRAG] = None
+Settings.storage_folder = os.getenv("GRAPH_WORKING_DIR", "./ragu_working_dir")
+Settings.language = "russian"
 
-
-def _get_embed_model() -> SentenceTransformer:
-    global _embed_model
-    if _embed_model is None:
-        _embed_model = SentenceTransformer("BAAI/bge-m3")
-    return _embed_model
+_llm: Optional[LLMOpenAI] = None
+_embedder: Optional[EmbedderOpenAI] = None
+_knowledge_graph: Optional[KnowledgeGraph] = None
 
 
-async def _embed(texts: list[str]) -> list[list[float]]:
-    model = _get_embed_model()
-    return model.encode(texts, normalize_embeddings=True, batch_size=32).tolist()
+def _client(**kw) -> CachedAsyncOpenAI:
+    return CachedAsyncOpenAI(base_url=f"{OLLAMA_URL}/v1", api_key="ollama", **kw)
 
 
-def get_rag() -> LightRAG:
-    """Возвращает синглтон LightRAG (подхватывает граф с диска, если уже построен)."""
-    global _rag_instance
-    if _rag_instance is None:
-        Path(WORKING_DIR).mkdir(parents=True, exist_ok=True)
-        _rag_instance = LightRAG(
-            working_dir=WORKING_DIR,
-            llm_model_func=ollama_model_complete,
-            llm_model_name=OLLAMA_MODEL,
-            llm_model_max_async=2,
-            llm_model_kwargs={
-                "host": OLLAMA_URL,
-                "options": {"num_ctx": 32768},
-            },
-            embedding_func=EmbeddingFunc(
-                embedding_dim=1024,
-                max_token_size=512,
-                func=_embed,
-            ),
-            addon_params={"language": "Russian"},
-        )
-    return _rag_instance
+def _init() -> None:
+    global _llm, _embedder, _knowledge_graph
+    if _knowledge_graph is not None:
+        return
+
+    _llm = LLMOpenAI(
+        client=_client(rate_max_simultaneous=2, cache="./llm_cache"),
+        model_name=OLLAMA_MODEL,
+    )
+    _embedder = EmbedderOpenAI(
+        client=_client(rate_max_simultaneous=10),
+        model_name="bge-m3",
+        dim=1024,
+        batch_size=64,
+    )
+    ragu_lm = LLMOpenAI(
+        client=_client(rate_max_simultaneous=4),
+        model_name=RAGU_LM_MODEL,
+    )
+    _knowledge_graph = KnowledgeGraph(
+        llm=_llm,
+        embedder=_embedder,
+        chunker=SimpleChunker(max_chunk_size=800, overlap=120), # можно исправить
+        artifact_extractor=RaguLmArtifactExtractor(llm=ragu_lm, temperature=0.0), # тут тоже можно потестировать
+        builder_settings=BuilderArguments(
+            use_llm_summarization=True, # информацию объединяет в один ответ
+            use_clustering=True, # группирует сущности в сообщества
+            make_community_summary=True, # пишет сводку по каждому сообществу
+            remove_isolated_nodes=True, # удаляет сущности без связей, чистит граф
+        ),
+    )
+
+
+def get_knowledge_graph() -> KnowledgeGraph:
+    _init()
+    return _knowledge_graph
+
+
+def get_llm() -> LLMOpenAI:
+    _init()
+    return _llm
+
+
+def get_embedder() -> EmbedderOpenAI:
+    _init()
+    return _embedder
 
 
 async def insert_articles(texts: list[str]) -> None:
-    """
-    Загружает тексты статей в граф. LightRAG через Ollama извлекает
-    сущности и связи, затем записывает результат в WORKING_DIR.
-    Безопасно вызывать повторно — уже виденные тексты пропускаются по хэшу.
-    """
-    rag = get_rag()
-    await rag.ainsert(texts)
+    """Загружает полные тексты статей в граф. Повторный вызов безопасен - дубли пропускаются."""
+    await get_knowledge_graph().build_from_docs(texts)
 
 
-
-# CLI: python -m graph.build_graph  — загружает все статьи из Postgres
-
+# CLI: python -m graph.build_graph
 async def _build_from_postgres() -> None:
     import asyncpg
 
