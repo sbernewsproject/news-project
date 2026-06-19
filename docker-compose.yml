@@ -1,24 +1,42 @@
 services:
   postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: newsdb
-      POSTGRES_USER: news
-      POSTGRES_PASSWORD: news
+    image: postgres:18.4
+    container_name: postgres
+    restart: unless-stopped
     ports:
       - "5432:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydb
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./db:/docker-entrypoint-initdb.d   # напарник кладёт сюда schema.sql
+      - ./scripts/init.sh:/docker-entrypoint-initdb.d/init.sh
+      - ./dumps:/dumps
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
 
   qdrant:
     image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
     ports:
-      - "6333:6333"   # HTTP / REST
-      - "6334:6334"   # gRPC
+      - "6333:6333"
+      - "6334:6334"
+    environment:
+      QDRANT__SERVICE__API_KEY: password
     volumes:
       - qdrantdata:/qdrant/storage
+    networks:
+      - rag-network
+
+networks:
+  rag-network:
+    driver: bridge
 
 volumes:
-  pgdata:
   qdrantdata:
