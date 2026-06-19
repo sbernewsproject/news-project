@@ -73,24 +73,26 @@ python3 parser/parser/main.py <папка> <команда> [--limit N] [--fresh
 
 ```bash
 # тест
-python3 parser/parser/main.py komsomolskaya_pravda sitemap --limit 2
-python3 parser/parser/main.py komsomolskaya_pravda parse --limit 5
-python3 parser/parser/main.py komsomolskaya_pravda parse --limit 5 --fresh
+python3 parser/parser/main.py parser/komsomolskaya_pravda sitemap --limit 2
+python3 parser/parser/main.py parser/komsomolskaya_pravda parse --limit 5
+python3 parser/parser/main.py parser/komsomolskaya_pravda parse --limit 5 --fresh
 
 # полный прогон
-python3 parser/parser/main.py komsomolskaya_pravda all
+python3 parser/parser/main.py parser/komsomolskaya_pravda all
 ```
+Подробнее: [komsomolskaya_pravda/README.md](komsomolskaya_pravda/README.md)
 
 ### Lenta.ru
 
 ```bash
 # тест
-python3 parser/parser/main.py lenta.ru sitemap --limit 2
-python3 parser/parser/main.py lenta.ru parse --limit 5
+python3 parser/parser/main.py parser/lenta.ru sitemap --limit 2
+python3 parser/parser/main.py parser/lenta.ru parse --limit 5
 
 # полный прогон
-python3 parser/parser/main.py lenta.ru all
+python3 parser/parser/main.py parser/lenta.ru all
 ```
+Подробнее: [lenta.ru/README.md](lenta.ru/README.md)
 
 ### Banki.ru — Банки
 
