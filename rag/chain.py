@@ -14,7 +14,7 @@ from typing import Optional
 import asyncpg
 import httpx
 
-from embeddings.embed_and_index import NewsIndexer
+from embeddings.embed_and_index import NewsIndexer, Reranker
 from graph.search import global_search, local_search
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
@@ -22,7 +22,8 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:32b")
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://news:news@localhost:5432/newsdb")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 
-TOP_K = 10
+TOP_K = 50   # сколько берём из Qdrant до reranker'а
+TOP_N = 10   # сколько отдаём в контекст после reranker'а
 SCORE_THRESHOLD = 0.5  # чанки ниже порога отбрасываются до генерации, нужно будет подкрутить на реальных данных.
 
 SYSTEM_PROMPT = """\
@@ -109,8 +110,9 @@ async def _generate(context: str, query: str) -> str:
 
 class RAGChain:
     def __init__(self, qdrant_url: str = QDRANT_URL):
-        # BGE-M3 загружается один раз при создании цепочки
+        # BGE-M3 и reranker загружаются один раз при создании цепочки
         self._indexer = NewsIndexer(qdrant_url=qdrant_url)
+        self._reranker = Reranker()
 
     async def answer(self, query: str, top_k: int = TOP_K) -> str:
         route = _route(query)
@@ -138,6 +140,8 @@ class RAGChain:
 
         if not chunks and not graph_ctx:
             return "Недостаточно данных в базе знаний."
+
+        chunks = self._reranker.rerank(query, chunks, top_n=TOP_N)
 
         context = _assemble_context(chunks, graph_ctx)
         answer = await _generate(context, query)

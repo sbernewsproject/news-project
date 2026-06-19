@@ -2,11 +2,12 @@ from dataclasses import dataclass
 # from dataclasses import dataclass, field    # Для GliNER
 from typing import Optional
 
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
 MODEL_NAME = "BAAI/bge-m3"
+RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 COLLECTION = "news_chunks"
 VECTOR_SIZE = 1024  # размерность dense-вектора BGE-M3
 BATCH_SIZE = 64
@@ -83,3 +84,16 @@ class NewsIndexer:
         return self.model.encode(
             f"query: {query}", normalize_embeddings=True
         ).tolist()
+
+
+class Reranker:
+    def __init__(self, model_name: str = RERANKER_MODEL):
+        self.model = CrossEncoder(model_name)
+
+    def rerank(self, query: str, chunks: list[dict], top_n: int) -> list[dict]:
+        if not chunks:
+            return chunks
+        pairs = [(query, c["text"]) for c in chunks]
+        scores = self.model.predict(pairs).tolist()
+        ranked = sorted(zip(scores, chunks), key=lambda x: x[0], reverse=True)
+        return [c for _, c in ranked[:top_n]]
