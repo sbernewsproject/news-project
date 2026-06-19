@@ -1,33 +1,37 @@
 """
-Настройки парсера для banki.ru — раздел «Банки».
+Настройки парсера для banki.ru — отзывы о банках.
 
 Запуск (из корня репозитория):
-  python3 parser/parser/main.py parser/banki.ru sitemap
-  python3 parser/parser/main.py parser/banki.ru parse --limit 5
-  python3 parser/parser/main.py parser/banki.ru all --limit 10
+  python3 parser/parser/main.py parser/banki.ru sitemap [--limit N]
+  python3 parser/parser/main.py parser/banki.ru parse   [--limit N]
+  python3 parser/parser/main.py parser/banki.ru all     [--limit N]
 
-sitemap — собирает slug'и банков из /sitemap/bankiru_banks_bank → all_article_links.txt
-parse   — для каждого slug'а парсит карточку банка + первые 2 стр. отзывов → parsed_articles.json
+sitemap — обходит банки, собирает URL каждого отзыва → all_article_links.txt
+          --limit N: обработать только первые N банков
+parse   — для каждого URL отзыва загружает полный текст → parsed_articles.json
+          --limit N: обработать только первые N отзывов
+
+Формат записи совпадает с новостной статьёй:
+  url, title, author, date_published, section ("bank_review"), body, body_length, score
 """
 
 import sys
 import os
 
 sys.path.insert(0, os.path.dirname(__file__))
-from parsers import collect_banki_links, fetch_banki_org
+from parsers import collect_banki_links, fetch_banki_review
 
 SITE_CONFIG = {
-    "name": "Banki.ru — Банки",
-    "url_prefix": "https://www.banki.ru/banks/bank/",
+    "name": "Banki.ru — Отзывы",
+    "url_prefix": "https://www.banki.ru/services/responses/bank/response/",
 
-    # Переопределяем сбор ссылок: вместо XML sitemap — HTML-страница
+    # Переопределяем сбор ссылок: вместо XML sitemap — HTML-обход страниц отзывов
     "collect_links": collect_banki_links,
 
-    # Переопределяем парсинг: вместо статьи — карточка банка + отзывы
-    "fetch_article": fetch_banki_org,
+    # Каждый отзыв парсится как отдельная статья в формате новости
+    "fetch_article": fetch_banki_review,
 
-    # Заглушки — не используются при наличии collect_links,
-    # но нужны чтобы load_site_config не упал при проверке
+    # Заглушки — не используются при наличии collect_links
     "sitemap_index":  "",
     "sitemap_filter": lambda u: False,
     "article_filter": lambda u: True,

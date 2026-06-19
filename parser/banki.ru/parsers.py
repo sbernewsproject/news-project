@@ -1,14 +1,14 @@
 """
-Парсинг banki.ru — банки.
+Парсинг banki.ru — отзывы о банках.
 
 Две публичные функции для config.py:
-  collect_banki_links(cfg, data_dir, limit, fresh) → список URL карточек банков
-  fetch_banki_org(url)                             → dict с данными банка + отзывы
+  collect_banki_links(cfg, data_dir, limit, fresh) → список URL отдельных отзывов
+  fetch_banki_review(url)                          → dict в формате статьи (как новость)
 
-Стратегия: берём сырые данные как есть из HTML/JSON-LD, без постобработки.
-  - Список отзывов: якорь h3 > a[href*="/response/"], бейджи по тексту
-  - Полный отзыв: JSON-LD (@type=Review) + div.text-size-6 для тегов
-  - Карточка банка: текстовый поиск рядом с ключевыми строками (лицензия, место)
+Стратегия:
+  - Sitemap-шаг: берём slug'и банков из /sitemap/bankiru_banks_bank,
+    затем для каждого банка собираем URL отзывов со страниц листинга.
+  - Parse-шаг: для каждого URL отзыва загружаем полный текст через JSON-LD.
 """
 
 import html
@@ -60,59 +60,87 @@ def _get(path: str, params: dict = None, retries: int = 3) -> requests.Response 
     return None
 
 
-# ── Сбор списка банков ────────────────────────────────────────────────────────
+# ── Сбор URL отзывов ─────────────────────────────────────────────────────────
 
 def collect_banki_links(cfg: dict, data_dir: str, limit: int = 0, fresh: bool = False) -> list[str]:
     """
-    Получает список URL карточек банков из /sitemap/bankiru_banks_bank.
-    Сохраняет в all_article_links.txt.
+    Шаг 1: получает slug'и банков из /sitemap/bankiru_banks_bank.
+    Шаг 2: для каждого банка обходит страницы листинга отзывов и собирает URL.
+    limit — максимум банков для обхода (0 = все).
+    Сохраняет URL отзывов в all_article_links.txt.
     """
     links_file = os.path.join(data_dir, "all_article_links.txt")
-    progress_file = os.path.join(data_dir, "sitemap_progress.json")
 
     if not fresh and os.path.exists(links_file):
         with open(links_file, encoding="utf-8") as f:
             existing = [l.strip() for l in f if l.strip()]
         if existing:
             print(f"sitemap: {cfg['name']}")
-            print(f"progress: {len(existing)} URL уже сохранено")
+            print(f"progress: {len(existing)} URL отзывов уже сохранено")
             return existing
 
     print(f"sitemap: {cfg['name']}")
-    print("Загружаю /sitemap/bankiru_banks_bank ...")
+    print("Загружаю список банков...")
 
     resp = _get("/sitemap/bankiru_banks_bank")
     if resp is None:
-        print("error: не удалось загрузить страницу")
+        print("error: не удалось загрузить список банков")
         return []
 
     soup = BeautifulSoup(resp.text, "lxml")
-    pattern = re.compile(r"^/banks/bank/([^/]+)/$")
-    seen = set()
-    urls = []
-    for a in soup.find_all("a", href=pattern):
-        slug = pattern.match(a["href"]).group(1)
-        if slug not in seen:
-            seen.add(slug)
-            urls.append(BASE_URL + a["href"])
+    bank_pattern = re.compile(r"^/banks/bank/([^/]+)/$")
+    seen_slugs = set()
+    slugs = []
+    for a in soup.find_all("a", href=bank_pattern):
+        slug = bank_pattern.match(a["href"]).group(1)
+        if slug not in seen_slugs:
+            seen_slugs.add(slug)
+            slugs.append(slug)
 
-    print(f"Найдено URL: {len(urls)}")
-
+    print(f"Найдено банков: {len(slugs)}")
     if limit:
-        urls = urls[:limit]
-        print(f"limit: {limit}")
+        slugs = slugs[:limit]
+        print(f"limit: {limit} банков")
+
+    review_urls = []
+    seen_reviews = set()
+
+    for i, slug in enumerate(slugs, 1):
+        print(f"[{i}/{len(slugs)}] {slug}")
+        for page in range(1, 20):
+            rev_resp = _get(
+                f"/services/responses/bank/{slug}/",
+                params={"page": page} if page > 1 else None,
+            )
+            if rev_resp is None:
+                break
+            page_reviews = _parse_reviews_page(rev_resp.text, slug)
+            if not page_reviews:
+                break
+            added = 0
+            for r in page_reviews:
+                rid = r.get("review_id")
+                if rid and rid not in seen_reviews:
+                    seen_reviews.add(rid)
+                    review_urls.append(BASE_URL + r["review_url"])
+                    added += 1
+            print(f"  стр. {page}: +{added}")
+            if len(page_reviews) < 5:
+                break
+
+    print(f"Найдено отзывов: {len(review_urls)}")
 
     os.makedirs(data_dir, exist_ok=True)
     with open(links_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(urls))
-    with open(progress_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(review_urls))
+    with open(os.path.join(data_dir, "sitemap_progress.json"), "w", encoding="utf-8") as f:
         json.dump(
-            {"processed_sitemaps": ["/sitemap/bankiru_banks_bank"], "all_links": urls},
+            {"processed_sitemaps": slugs, "all_links": review_urls},
             f, ensure_ascii=False, indent=2,
         )
 
-    print(f"done: {len(urls)} links -> {links_file}")
-    return urls
+    print(f"done: {len(review_urls)} review URLs -> {links_file}")
+    return review_urls
 
 
 # ── Парсинг одного банка ──────────────────────────────────────────────────────
@@ -361,6 +389,50 @@ def fetch_review_detail(category: str, review_id: str) -> dict | None:
     return _parse_review_detail(review_id, category, resp.text)
 
 
+# ── Публичная функция для config.py ──────────────────────────────────────────
+
+def fetch_banki_review(url: str) -> dict | None:
+    """
+    Загружает страницу одного отзыва и возвращает dict в формате статьи:
+    url, title, author, date_published, section, body, body_length, score.
+    """
+    m = re.search(r"/response/(\d+)/", url)
+    if not m:
+        return {"error": "invalid review url"}
+    review_id = m.group(1)
+
+    if "/services/responses/bank/" in url:
+        category = "bank"
+    elif "/insurance/responses/" in url:
+        category = "insurance"
+    elif "/microloans/responses/" in url:
+        category = "mfo"
+    else:
+        category = "bank"
+
+    r = fetch_review_detail(category, review_id)
+    if r is None:
+        return {"error": "failed to load"}
+
+    raw = r.get("text_full", "")
+    if not raw:
+        return {"error": "empty review body"}
+
+    text = BeautifulSoup(raw, "lxml").get_text(separator="\n", strip=True)
+
+    return {
+        "url":            url,
+        "title":          r.get("title", ""),
+        "author":         r.get("author_id", ""),
+        "date_published": r.get("date", ""),
+        "section":        "bank_review",
+        "bank_name":      r.get("bank_name", ""),
+        "body":           text,
+        "body_length":    len(text),
+        "score":          r.get("score", ""),
+    }
+
+
 def _parse_review_detail(review_id: str, category: str, html_text: str) -> dict:
     soup = BeautifulSoup(html_text, "lxml")
     r = {"review_id": review_id, "category": category}
@@ -379,6 +451,7 @@ def _parse_review_detail(review_id: str, category: str, html_text: str) -> dict:
                 r["author_id"] = data.get("author", {}).get("name", "")
                 body_raw       = data.get("author", {}).get("reviewBody", "")
                 r["text_full"] = html.unescape(body_raw)
+                r["bank_name"] = data.get("itemReviewed", {}).get("name", "")
                 break
         except (json.JSONDecodeError, ValueError, AttributeError):
             continue
