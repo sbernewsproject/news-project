@@ -12,19 +12,23 @@ SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
 @dataclass
 class Article:
     article_id: int
+    author: str
     title: str
-    source: str
-    published_at: date
-    language: str
-    content: str
+    arttext:str
+    arturl:str
+    mark:int
+    parsedate:str
+    createdate:str
+    types_id:int
+
 
 
 @dataclass
 class Chunk:
+    chunk_id:int
+    chunk_text:str
+    payload:json
     article_id: int
-    position: int
-    text: str
-    content_hash: str
 
 # здесь определяются метаданные в векторной БД, то что мы подаем в payload
 # используем recursive character split тут можно поиграться с тем какой способ делать
@@ -36,8 +40,8 @@ def chunk_article(article: Article) -> list[Chunk]:
     )
     prefix = (
         f"{article.title}\n"
-        f"Источник: {article.source}\n"
-        f"Дата: {article.published_at}\n\n"
+        f"Источник: {article.arturl}\n"
+        f"Дата: {article.createdate}\n\n"
     )
     pieces = splitter.split_text(article.content)
     return [
