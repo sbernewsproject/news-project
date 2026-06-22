@@ -27,7 +27,7 @@ class Article:
 class Chunk:
     chunk_id:int
     chunk_text:str
-    payload:json
+    payload:dict
     article_id: int
 
 # здесь определяются метаданные в векторной БД, то что мы подаем в payload
