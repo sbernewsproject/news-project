@@ -49,16 +49,18 @@ def insert_chunks(cursor, chunks) -> list[int]:
     chunk_ids = []
     for chunk in chunks:
         cursor.execute("""
-            INSERT INTO chunks (article_id, chunk_text, chunk_index, source, published_at, content_hash)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO chunk (article_id, chunk_text, payload)
+            VALUES (%s, %s, %s)
             RETURNING chunk_id
         """, (
             chunk.article_id,
             chunk.text,
-            chunk.chunk_index,
-            chunk.payload["source"],
-            chunk.payload["published_at"],
-            chunk.payload["content_hash"],
+            json.dumps({
+                "chunk_index": chunk.chunk_index,
+                "source": chunk.payload["source"],
+                "published_at": chunk.payload["published_at"],
+                "content_hash": chunk.payload["content_hash"],
+            }),
         ))
         chunk_ids.append(cursor.fetchone()[0])
     return chunk_ids
