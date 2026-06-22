@@ -44,6 +44,24 @@ def insert_article(cursor, item: dict, types_id: int) -> int:
     ))
     return cursor.fetchone()[0]
 
+def insert_chunks(cursor, chunks) -> list[int]:
+    """Вставляет чанки в Postgres и возвращает реальные chunk_id."""
+    chunk_ids = []
+    for chunk in chunks:
+        cursor.execute("""
+            INSERT INTO chunks (article_id, chunk_text, chunk_index, source, published_at, content_hash)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING chunk_id
+        """, (
+            chunk.article_id,
+            chunk.text,
+            chunk.chunk_index,
+            chunk.payload["source"],
+            chunk.payload["published_at"],
+            chunk.payload["content_hash"],
+        ))
+        chunk_ids.append(cursor.fetchone()[0])
+    return chunk_ids
 
 def link_article_theme(cursor, article_id: int, theme_id: int):
     cursor.execute("""
