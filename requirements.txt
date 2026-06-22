@@ -7,7 +7,7 @@ gliner>=0.2
 langchain-text-splitters>=0.3
 sentence-transformers>=3.0
 qdrant-client>=1.9
-graph_ragu @ file:///Users/Seva/RAGU
+graph-ragu==0.0.3
 
 # --- database ---
 asyncpg>=0.29
