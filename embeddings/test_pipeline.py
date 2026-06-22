@@ -2,19 +2,15 @@
 Сквозной smoke-тест: статья → чанки → эмбеддинги → индекс → поиск.
 Использует in-memory Qdrant — Docker не нужен.
 """
-from datetime import date
-
 from chunker import Article, chunk_article
 from embed_and_index import IndexableChunk, NewsIndexer
 
 
 ARTICLE = Article(
     article_id=1,
+    author="РБК",
     title="ЦБ повысил ключевую ставку до 21%",
-    source="РБК",
-    published_at=date(2025, 10, 25),
-    language="ru",
-    content=(
+    arttext=(
         "Банк России на заседании совета директоров принял решение повысить "
         "ключевую ставку на 200 базисных пунктов — до 21% годовых. "
         "Это рекордный уровень за всю историю существования ключевой ставки в России.\n\n"
@@ -25,6 +21,11 @@ ARTICLE = Article(
         "на 20 декабря 2025 года. Аналитики ожидают, что ставка останется на "
         "текущем уровне либо будет повышена ещё раз в зависимости от инфляционной динамики."
     ),
+    arturl="https://rbc.ru",
+    mark=None,
+    parsedate="2025-10-25",
+    createdate="2025-10-25",
+    types_id=1,
 )
 
 
@@ -33,7 +34,7 @@ def main() -> None:
     chunks = chunk_article(ARTICLE)
     print(f"  Чанков: {len(chunks)}")
     for c in chunks:
-        print(f"  [{c.position}] hash={c.content_hash}  len={len(c.text)}")
+        print(f"  [{c.chunk_index}] hash={c.payload['content_hash']}  len={len(c.text)}")
         print(f"       {c.text[:80]!r}...")
 
     print("\n Шаг 2: индексация (in-memory Qdrant) ")
@@ -44,10 +45,8 @@ def main() -> None:
         IndexableChunk(
             chunk_id=i + 1,
             article_id=c.article_id,
-            text=c.text,
-            source=ARTICLE.source,
-            published_at=str(ARTICLE.published_at),
-            language=ARTICLE.language,
+            chunk_text=c.text,
+            payload=c.payload,
         )
         for i, c in enumerate(chunks)
     ]

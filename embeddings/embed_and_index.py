@@ -42,7 +42,7 @@ class NewsIndexer:
         # обсуждали это с Сергеем на случай редактируемой статьи и способ перезаписи чанка
         for start in range(0, len(chunks), BATCH_SIZE):
             batch = chunks[start : start + BATCH_SIZE]
-            vectors = self._embed_passages([c.text for c in batch])
+            vectors = self._embed_passages([c.chunk_text for c in batch])
             points = [
                 PointStruct(
                     id=c.chunk_id,
@@ -62,7 +62,7 @@ class NewsIndexer:
             query_vector=vector,
             limit=top_k,
         )
-        return [(int(r.payload["chunk_id"]), r.score) for r in results]
+        return [(r.id, r.score) for r in results]
 
     def _embed_passages(self, texts: list[str]) -> list[list[float]]:
         prefixed = [f"passage: {t}" for t in texts]
