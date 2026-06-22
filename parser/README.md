@@ -12,6 +12,7 @@
 | `komsomolskaya_pravda/` | Новостные статьи | XML sitemap |
 | `lenta.ru/` | Новостные статьи | XML sitemap |
 | `banki.ru/` | Карточки банков + отзывы | HTML-страница со списком |
+| `sravni.ru/` | Отзывы о банках | `__NEXT_DATA__` (Next.js SSR) |
 
 ## Структура
 
@@ -35,6 +36,11 @@ lenta.ru/                   настройки для lenta.ru
 banki.ru/                   настройки для banki.ru
   config.py
   parsers.py                парсинг карточек банков и отзывов
+  README.md                 подробная документация
+
+sravni.ru/                  настройки для sravni.ru
+  config.py
+  parsers.py                парсинг отзывов через __NEXT_DATA__
   README.md                 подробная документация
 ```
 
@@ -112,6 +118,19 @@ python3 parser/parser/main.py parser/banki.ru all
 
 Подробнее: [banki.ru/README.md](banki.ru/README.md)
 
+### Sravni.ru — Отзывы о банках
+
+```bash
+# тест — первые 3 банка, первые 10 отзывов
+python3 parser/parser/main.py parser/sravni.ru sitemap --limit 3
+python3 parser/parser/main.py parser/sravni.ru parse --limit 10
+
+# полный прогон (все ~275 активных банков)
+python3 parser/parser/main.py parser/sravni.ru all
+```
+
+Подробнее: [sravni.ru/README.md](sravni.ru/README.md)
+
 Прогресс сохраняется после каждой записи — можно прервать и продолжить.
 
 ## Формат результата
@@ -137,6 +156,30 @@ python3 parser/parser/main.py parser/banki.ru all
 ### Banki.ru
 
 `parsed_articles.json` — список объектов, по одному на банк. Каждый содержит карточку банка и массив `reviews` с превью отзывов. Подробнее в [banki.ru/README.md](banki.ru/README.md).
+
+### Sravni.ru
+
+`parsed_articles.json` — список объектов, по одному на отзыв:
+
+```json
+{
+  "url": "https://www.sravni.ru/bank/sberbank-rossii/otzyvy/1126129/",
+  "title": "Мошенничество сбербанка с кредитными картами",
+  "author": "Дарья Арутюнова",
+  "date_published": "2026-05-10T08:22:13.577071Z",
+  "section": "bank_review",
+  "bank_name": "Сбербанк",
+  "bank_slug": "sberbank-rossii",
+  "body": "Здравствуйте, имею негативный опыт...",
+  "body_length": 969,
+  "score": 1,
+  "city": "Армавир",
+  "review_tag": "creditCards",
+  "product_name": "СберКарта",
+  "problem_solved": false,
+  "parsed_at": "2026-06-22T12:00:00"
+}
+```
 
 ## Добавить новый сайт
 

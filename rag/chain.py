@@ -59,8 +59,11 @@ async def _fetch_chunks(chunk_ids: list[int]) -> list[dict]:
     try:
         rows = await conn.fetch(
             """
-            SELECT chunk_id, text, source, published_at
-            FROM chunks
+            SELECT chunk_id,
+                   chunk_text AS text,
+                   payload->>'source' AS source,
+                   payload->>'published_at' AS published_at
+            FROM chunk
             WHERE chunk_id = ANY($1::bigint[])
             ORDER BY array_position($1::bigint[], chunk_id)
             """,
