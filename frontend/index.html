@@ -109,6 +109,24 @@
       background: rgba(255,255,255,0.4);
     }
 
+    .sidebar-reset {
+      display: none;
+      margin: 16px 28px 0;
+      padding: 8px 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      cursor: pointer;
+      border-top: 1px solid rgba(255,255,255,0.12);
+      padding-top: 14px;
+      user-select: none;
+      transition: color var(--transition);
+    }
+
+    .sidebar-reset:hover { color: #fff; }
+
+    .sidebar-reset.visible { display: block; }
+
     /* ===== CENTER CONTENT ===== */
     .content {
       flex: 1;
@@ -198,10 +216,14 @@
     .news-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
+      grid-auto-rows: max-content;
+      align-items: start;
       gap: 14px;
       overflow-y: auto;
       flex: 1;
+      min-height: 0;
       padding-right: 4px;
+      padding-bottom: 8px;
       align-content: start;
     }
 
@@ -217,18 +239,27 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
+      height: auto;
+      min-height: 0;
       box-shadow: var(--shadow);
       transition: opacity var(--transition), transform var(--transition), filter var(--transition);
     }
 
-    .card.dimmed {
-      opacity: 0.3;
-      filter: grayscale(0.4);
+    /* Карточки, не подходящие под текущий фильтр/поиск, полностью скрываются */
+    .card.hidden {
+      display: none;
     }
 
     .card-body {
       padding: 18px 18px 14px;
       flex: 1;
+    }
+
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
     }
 
     .card-tag {
@@ -238,7 +269,9 @@
       text-transform: uppercase;
       letter-spacing: 1px;
       color: var(--accent);
-      margin-bottom: 8px;
+      background: rgba(74,144,217,0.12);
+      padding: 3px 8px;
+      border-radius: 10px;
     }
 
     .card-title {
@@ -246,6 +279,10 @@
       font-weight: 700;
       line-height: 1.4;
       margin-bottom: 12px;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
 
     .card-actions {
@@ -613,6 +650,7 @@
       <span>Спорт</span>
       <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
     </div>
+    <div class="sidebar-reset" id="sidebarReset" onclick="resetTopics()">Сбросить фильтры</div>
   </aside>
 
   <!-- CENTER -->
@@ -675,73 +713,6 @@
   // ============================
   // MOCK DATA
   // ============================
-  const ARTICLES = [
-    {
-      id: 1,
-      topic: 'politics',
-      title: 'Государственная Дума приняла поправки к закону о цифровых активах',
-      summary: 'Депутаты в третьем чтении одобрили поправки, регулирующие оборот криптовалют и цифровых финансовых активов на территории России.',
-      source: 'https://example.com/article/1',
-      sourceName: 'Российская газета',
-    },
-    {
-      id: 2,
-      topic: 'business',
-      title: 'Нефтяные котировки выросли на фоне сокращения добычи ОПЕК+',
-      summary: 'Цена Brent поднялась выше 88 долларов за баррель после того, как страны картеля подтвердили продление ограничений добычи до конца квартала.',
-      source: 'https://example.com/article/2',
-      sourceName: 'РБК',
-    },
-    {
-      id: 3,
-      topic: 'tech',
-      title: 'Сбербанк представил новую языковую модель GigaChat 2.0',
-      summary: 'На конференции AI Journey банк продемонстрировал обновлённую версию собственной LLM с улучшенным рассуждением и поддержкой мультимодальных запросов.',
-      source: 'https://example.com/article/3',
-      sourceName: 'VC.ru',
-    },
-    {
-      id: 4,
-      topic: 'science',
-      title: 'Российские учёные синтезировали новый сверхпроводящий материал',
-      summary: 'Команда физиков из МГУ и МФТИ сообщила о получении соединения, проявляющего сверхпроводимость при температуре −70 °C — рекорд для купратной группы.',
-      source: 'https://example.com/article/4',
-      sourceName: 'Наука и жизнь',
-    },
-    {
-      id: 5,
-      topic: 'health',
-      title: 'ВОЗ обновила рекомендации по лечению резистентного туберкулёза',
-      summary: 'Всемирная организация здравоохранения сократила стандартный курс терапии с 20 до 6 месяцев благодаря новым комбинациям антибиотиков.',
-      source: 'https://example.com/article/5',
-      sourceName: 'Медвестник',
-    },
-    {
-      id: 6,
-      topic: 'sports',
-      title: 'Сборная России по хоккею обыграла Финляндию в финале турнира',
-      summary: 'Со счётом 3:1 российские хоккеисты завоевали золотые медали международного турнира, прервав серию поражений в финальных матчах.',
-      source: 'https://example.com/article/6',
-      sourceName: 'Спорт-Экспресс',
-    },
-    {
-      id: 7,
-      topic: 'business',
-      title: 'ЦБ сохранил ключевую ставку на уровне 16% третий раз подряд',
-      summary: 'Банк России обосновал решение устойчивым замедлением инфляции, однако предупредил о возможном повышении в случае ускорения роста цен.',
-      source: 'https://example.com/article/7',
-      sourceName: 'Коммерсантъ',
-    },
-    {
-      id: 8,
-      topic: 'tech',
-      title: 'Яндекс запустил беспилотное такси в Екатеринбурге',
-      summary: 'Сервис «Яндекс.Роботакси» начал коммерческую эксплуатацию в третьем городе России. Автомобили работают без оператора на борту в дневное время.',
-      source: 'https://example.com/article/8',
-      sourceName: 'Хабр',
-    },
-  ];
-
   const TOPIC_LABELS = {
     politics: 'Политика',
     business: 'Бизнес',
@@ -751,10 +722,109 @@
     sports: 'Спорт',
   };
 
+  const TOPIC_KEYS = Object.keys(TOPIC_LABELS);
+
+  // Шаблоны заголовков/описаний по темам + список «подтем»-подстановок.
+  // Каждая тема даёт subjects.length новостей (комбинируется с несколькими шаблонами по кругу).
+  const TOPIC_TEMPLATES = {
+    politics: {
+      templates: [
+        s => ({ title: `Госдума приняла закон о ${s}`, summary: `Депутаты одобрили в окончательном чтении закон, регулирующий ${s} на федеральном уровне.` }),
+        s => ({ title: `Президент подписал указ о ${s}`, summary: `Глава государства утвердил документ, касающийся ${s} и определяющий порядок его применения.` }),
+        s => ({ title: `Правительство утвердило новые меры по ${s}`, summary: `Кабинет министров представил план мероприятий, направленных на совершенствование ${s} в ближайшие годы.` }),
+        s => ({ title: `Совет Федерации одобрил инициативу по ${s}`, summary: `Сенаторы поддержали законопроект, затрагивающий ${s} и предусматривающий переходный период для регионов.` }),
+      ],
+      subjects: ['цифровым платежам','избирательной системе','государственным закупкам','местному самоуправлению','государственной службе','охране окружающей среды','национальной безопасности','региональному бюджету','административной реформе','культурной политике','образовательным стандартам','миграционному учёту','градостроительству','общественному транспорту','пенсионной системе','земельному законодательству','антикоррупционной политике'],
+    },
+    business: {
+      templates: [
+        s => ({ title: `Крупная компания объявила о росте показателей по ${s}`, summary: `Бизнес сообщил об увеличении выручки, связывая успех с изменениями в сфере ${s}.` }),
+        s => ({ title: `ЦБ прокомментировал ситуацию с ${s}`, summary: `Банк России оценил текущие тенденции, касающиеся ${s}, и обозначил возможные риски для рынка.` }),
+        s => ({ title: `Эксперты спрогнозировали изменения на рынке ${s}`, summary: `Аналитики ожидают перестройку рынка под влиянием новых факторов, связанных с ${s}.` }),
+        s => ({ title: `Минфин представил отчёт по ${s}`, summary: `Ведомство опубликовало данные, отражающие динамику ${s} за последний отчётный период.` }),
+      ],
+      subjects: ['нефтяных котировок','валютного курса','розничной торговли','банковского сектора','фондового рынка','внешней торговли','инфляции','ключевой ставки','инвестиционного климата','рынка недвижимости','логистических цепочек','малого бизнеса','госкорпораций','страхового рынка','рынка труда','промышленного производства','венчурных инвестиций'],
+    },
+    tech: {
+      templates: [
+        s => ({ title: `Компания представила новое решение в области ${s}`, summary: `Разработчики продемонстрировали продукт, использующий ${s} для повышения эффективности.` }),
+        s => ({ title: `Найдена уязвимость в системах ${s}`, summary: `Специалисты по безопасности сообщили о проблеме, затрагивающей ${s}, и выпустили рекомендации по защите.` }),
+        s => ({ title: `Запущен пилотный проект на основе ${s}`, summary: `В нескольких регионах начали тестировать технологию ${s} в рамках пилотной программы.` }),
+        s => ({ title: `Аналитики оценили перспективы рынка ${s}`, summary: `Согласно новому исследованию, рынок ${s} продолжит активный рост в ближайшие годы.` }),
+      ],
+      subjects: ['искусственного интеллекта','беспилотного транспорта','облачных вычислений','кибербезопасности','квантовых вычислений','мобильных приложений','робототехники','больших данных','дронов','спутниковой связи','виртуальной реальности','блокчейн-технологий','умных устройств','биометрии','5G-сетей','нейросетей','автоматизации производства'],
+    },
+    science: {
+      templates: [
+        s => ({ title: `Учёные совершили открытие в области ${s}`, summary: `Исследовательская группа опубликовала результаты работы, связанной с ${s}, в научном журнале.` }),
+        s => ({ title: `Найдены новые данные о ${s}`, summary: `Команда исследователей представила находку, которая может изменить представления о ${s}.` }),
+        s => ({ title: `Эксперимент подтвердил гипотезу о ${s}`, summary: `Результаты лабораторных испытаний подтвердили ранее выдвинутую теорию о ${s}.` }),
+        s => ({ title: `Запущен новый проект по изучению ${s}`, summary: `Институт объявил о старте долгосрочной программы исследований в области ${s}.` }),
+      ],
+      subjects: ['сверхпроводимости','чёрных дыр','древних поселений','генетики человека','климатических изменений','микробиома','тёмной материи','вулканической активности','океанических течений','палеонтологии','нейронаук','экзопланет','квантовой физики','биоразнообразия','полярных льдов','материаловедения','археологии'],
+    },
+    health: {
+      templates: [
+        s => ({ title: `Минздрав обновил рекомендации по ${s}`, summary: `Ведомство пересмотрело подходы к ${s} на основе новых клинических данных.` }),
+        s => ({ title: `Учёные разработали новый метод лечения ${s}`, summary: `Клинические испытания показали эффективность нового подхода к терапии ${s}.` }),
+        s => ({ title: `ВОЗ выступила с заявлением о ${s}`, summary: `Международная организация прокомментировала ситуацию с ${s} и дала рекомендации странам.` }),
+        s => ({ title: `Запущена программа профилактики ${s}`, summary: `Региональные клиники начали внедрять новую программу, направленную на раннее выявление ${s}.` }),
+      ],
+      subjects: ['сезонного гриппа','сердечно-сосудистых заболеваний','диабета','туберкулёза','психического здоровья','детского ожирения','онкологических заболеваний','вакцинации','антибиотикорезистентности','репродуктивного здоровья','зрения','аллергии','нарушений сна','заболеваний опорно-двигательного аппарата','инфекционных заболеваний','питания пожилых людей','реабилитации после травм'],
+    },
+    sports: {
+      templates: [
+        s => ({ title: `Сборная одержала победу на турнире по ${s}`, summary: `Команда показала уверенную игру и завоевала медали на международных соревнованиях по ${s}.` }),
+        s => ({ title: `Объявлен состав команды на чемпионат по ${s}`, summary: `Тренерский штаб определил список спортсменов, которые примут участие в первенстве по ${s}.` }),
+        s => ({ title: `Спортсмен установил новый рекорд в ${s}`, summary: `Достижение стало главным событием сезона в дисциплине ${s} и попало в книгу рекордов федерации.` }),
+        s => ({ title: `В городе пройдёт крупный турнир по ${s}`, summary: `Организаторы анонсировали проведение масштабных соревнований по ${s} с участием зарубежных команд.` }),
+      ],
+      subjects: ['хоккею','футболу','теннису','лёгкой атлетике','плаванию','фигурному катанию','боксу','баскетболу','волейболу','биатлону','гимнастике','борьбе','шахматам','велоспорту','лыжным гонкам','регби','гребле'],
+    },
+  };
+
+  const SOURCE_NAMES = ['РИА Новости','Интерфакс','ТАСС','РБК','Коммерсантъ','Известия','Лента.ру','Forbes','Хабр','VC.ru','N+1','Наука и жизнь','Медвестник','Спорт-Экспресс','Чемпионат','Российская газета','Финмаркет','Роскосмос'];
+
+  function generateArticles() {
+    const list = [];
+    let id = 1;
+
+    TOPIC_KEYS.forEach(topic => {
+      const { templates, subjects } = TOPIC_TEMPLATES[topic];
+      subjects.forEach((subject, i) => {
+        const { title, summary } = templates[i % templates.length](subject);
+        list.push({
+          id: id,
+          topics: [topic],
+          title,
+          summary,
+          source: `https://example.com/article/${id}`,
+          sourceName: SOURCE_NAMES[id % SOURCE_NAMES.length],
+        });
+        id++;
+      });
+    });
+
+    // Часть новостей относится сразу к нескольким категориям —
+    // добавляем вторую тему каждой 4-й статье (например, технологии + бизнес).
+    list.forEach((article, idx) => {
+      if (idx % 4 === 3) {
+        const primary = article.topics[0];
+        const otherTopics = TOPIC_KEYS.filter(t => t !== primary);
+        const secondary = otherTopics[idx % otherTopics.length];
+        article.topics.push(secondary);
+      }
+    });
+
+    return list;
+  }
+
+  const ARTICLES = generateArticles();
+
   // ============================
   // STATE
   // ============================
-  let activeTopic = null;
+  let activeTopics = new Set(); // несколько категорий могут быть выбраны одновременно
   let searchQuery = '';
   let currentArticleId = null;
   let chatHistory = [];
@@ -775,25 +845,28 @@
     let anyVisible = false;
 
     ARTICLES.forEach(article => {
-      const matchesTopic = !activeTopic || article.topic === activeTopic;
+      // Статья видна, если хотя бы одна из её тем входит в выбранные категории
+      // (или если категории вообще не выбраны — тогда фильтр по теме не действует).
+      const matchesTopic = activeTopics.size === 0
+        || article.topics.some(t => activeTopics.has(t));
       const matchesSearch = !q
         || article.title.toLowerCase().includes(q)
         || article.summary.toLowerCase().includes(q);
 
       const card = buildCard(article);
 
-      if (!matchesTopic) {
-        card.classList.add('dimmed');
-      } else if (q && !matchesSearch) {
-        card.classList.add('dimmed');
-      } else {
+      // Карточка остаётся видимой только если подходит и под выбранные категории, и под поиск.
+      // Иначе она полностью скрывается (не просто затемняется).
+      if (matchesTopic && matchesSearch) {
         anyVisible = true;
+      } else {
+        card.classList.add('hidden');
       }
 
       grid.appendChild(card);
     });
 
-    noResults.style.display = (q && !anyVisible && activeTopic === null) ? 'block' : 'none';
+    noResults.style.display = !anyVisible ? 'block' : 'none';
   }
 
   function buildCard(article) {
@@ -801,9 +874,13 @@
     card.className = 'card';
     card.dataset.id = article.id;
 
+    const tagsHtml = article.topics
+      .map(t => `<span class="card-tag">${TOPIC_LABELS[t]}</span>`)
+      .join('');
+
     card.innerHTML = `
       <div class="card-body">
-        <span class="card-tag">${TOPIC_LABELS[article.topic]}</span>
+        <div class="card-tags">${tagsHtml}</div>
         <div class="card-title">${article.title}</div>
       </div>
       <div class="card-actions">
@@ -831,25 +908,40 @@
   }
 
   // ============================
-  // TOPIC FILTER
+  // TOPIC FILTER (множественный выбор категорий)
   // ============================
+  function updateResetVisibility() {
+    document.getElementById('sidebarReset').classList.toggle('visible', activeTopics.size > 0);
+  }
+
   function toggleTopic(el) {
     const topic = el.dataset.topic;
-    if (activeTopic === topic) {
-      activeTopic = null;
+    if (activeTopics.has(topic)) {
+      // Повторное нажатие на уже активную категорию снимает только её
+      activeTopics.delete(topic);
       el.classList.remove('active');
     } else {
-      document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-      activeTopic = topic;
+      // Категории не исключают друг друга — можно выбрать сразу несколько
+      activeTopics.add(topic);
       el.classList.add('active');
     }
+    updateResetVisibility();
     renderCards();
   }
 
   function clearTopic(event, el) {
     event.stopPropagation();
-    activeTopic = null;
+    const topic = el.dataset.topic;
+    activeTopics.delete(topic);
     el.classList.remove('active');
+    updateResetVisibility();
+    renderCards();
+  }
+
+  function resetTopics() {
+    activeTopics.clear();
+    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+    updateResetVisibility();
     renderCards();
   }
 
