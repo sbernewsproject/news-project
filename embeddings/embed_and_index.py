@@ -15,13 +15,10 @@ BATCH_SIZE = 64
 
 @dataclass
 class IndexableChunk:
-    chunk_id: int       # BIGSERIAL из Postgres
+    chunk_id: int
+    chunk_text: str
+    payload: dict
     article_id: int
-    text: str           # обогащённый текст: префикс (заголовок/источник/дата) + кусок
-    source: str
-    published_at: str   # дата в формате ISO-8601 (уточнить у Алены в каком в итоге формате дата)
-    language: str    # канон, убрать это поле и добавить недостающие. Узнать какие поля в бд
-    # entities: list[dict] = field(default_factory=list)
 
 
 class NewsIndexer:
@@ -50,14 +47,7 @@ class NewsIndexer:
                 PointStruct(
                     id=c.chunk_id,
                     vector=v,
-                    payload={ # поля еще будут изменены нужно узнать у Сергея и Кирилла какие метаданные передаем
-                        "chunk_id": c.chunk_id,
-                        "article_id": c.article_id,
-                        "source": c.source,
-                        "published_at": c.published_at,
-                        "language": c.language,
-                        # "entities": c.entities,
-                    },
+                    payload=c.payload
                 )
                 for c, v in zip(batch, vectors)
             ]
