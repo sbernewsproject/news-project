@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Актуальные новости</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy: #1b2c4e;
+      --navy-light: #243659;
+      --bg: #d6e4f0;
+      --white: #ffffff;
+      --card-text: #ffffff;
+      --accent: #4a90d9;
+      --accent-hover: #357abd;
+      --muted: #8fa3b8;
+      --expand-bg: #f5f0e8;
+      --expand-border: #d9c99a;
+      --sidebar-w: 220px;
+      --panel-w: 300px;
+      --panel-w-chat: 420px;
+      --radius: 12px;
+      --shadow: 0 4px 20px rgba(0,0,0,0.12);
+      --transition: 0.25s ease;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--navy);
+    }
+
+    /* ===== LAYOUT ===== */
+    .app {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ===== SIDEBAR ===== */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--navy);
+      display: flex;
+      flex-direction: column;
+      padding: 32px 0;
+      gap: 4px;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .sidebar-item {
+      position: relative;
+      padding: 14px 28px;
+      color: rgba(255,255,255,0.75);
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: color var(--transition), background var(--transition);
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-item:hover {
+      color: #fff;
+      background: rgba(255,255,255,0.07);
+    }
+
+    .sidebar-item.active {
+      color: #fff;
+      background: rgba(255,255,255,0.12);
+    }
+
+    .sidebar-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 6px;
+      bottom: 6px;
+      width: 4px;
+      background: var(--accent);
+      border-radius: 0 4px 4px 0;
+    }
+
+    .sidebar-item .topic-x {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      font-size: 13px;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: background var(--transition);
+    }
+
+    .sidebar-item.active .topic-x {
+      display: flex;
+    }
+
+    .sidebar-item .topic-x:hover {
+      background: rgba(255,255,255,0.4);
+    }
+
+    /* ===== CENTER CONTENT ===== */
+    .content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .header {
+      background: var(--navy);
+      color: #fff;
+      text-align: center;
+      padding: 20px 32px;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .inner {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 20px 24px;
+      gap: 16px;
+      overflow: hidden;
+    }
+
+    /* ===== SEARCH ===== */
+    .search-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .search-wrap svg.search-icon {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 14px 44px 14px 48px;
+      border: none;
+      border-radius: 30px;
+      background: var(--white);
+      font-size: 16px;
+      color: var(--navy);
+      box-shadow: var(--shadow);
+      outline: none;
+      transition: box-shadow var(--transition);
+    }
+
+    .search-input:focus {
+      box-shadow: 0 4px 24px rgba(74,144,217,0.25);
+    }
+
+    .search-clear {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--muted);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 24px;
+      text-align: center;
+      padding: 0;
+      transition: background var(--transition);
+    }
+
+    .search-clear:hover { background: var(--navy); }
+    .search-clear.visible { display: block; }
+
+    /* ===== NEWS GRID ===== */
+    .news-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      overflow-y: auto;
+      flex: 1;
+      padding-right: 4px;
+      align-content: start;
+    }
+
+    .news-grid::-webkit-scrollbar { width: 6px; }
+    .news-grid::-webkit-scrollbar-track { background: transparent; }
+    .news-grid::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+
+    /* ===== CARD ===== */
+    .card {
+      background: var(--navy);
+      border-radius: var(--radius);
+      color: var(--card-text);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow);
+      transition: opacity var(--transition), transform var(--transition), filter var(--transition);
+    }
+
+    .card.dimmed {
+      opacity: 0.3;
+      filter: grayscale(0.4);
+    }
+
+    .card-body {
+      padding: 18px 18px 14px;
+      flex: 1;
+    }
+
+    .card-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }
+
+    .card-actions {
+      padding: 0 18px 16px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 8px 18px;
+      border-radius: 20px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition);
+    }
+
+    .btn-ask {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+    }
+
+    .btn-ask:hover {
+      background: var(--accent);
+    }
+
+    .btn-more {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+    }
+
+    .btn-more:hover {
+      background: rgba(255,255,255,0.28);
+    }
+
+    /* ===== EXPAND PANEL ===== */
+    .card-expand {
+      display: none;
+      background: var(--expand-bg);
+      border-top: 1px solid var(--expand-border);
+      padding: 14px 18px;
+      color: var(--navy);
+    }
+
+    .card-expand.open {
+      display: block;
+    }
+
+    .card-expand p {
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 10px;
+      color: #3a4a5c;
+    }
+
+    .card-expand a {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .card-expand a:hover { text-decoration: underline; }
+
+    /* ===== NO RESULTS ===== */
+    .no-results {
+      display: none;
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 48px;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    /* ===== AI PANEL ===== */
+    .ai-panel {
+      width: var(--panel-w);
+      background: var(--white);
+      border-radius: var(--radius) 0 0 var(--radius);
+      margin: 16px 16px 16px 0;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow);
+      flex-shrink: 0;
+      transition: width var(--transition);
+      overflow: hidden;
+    }
+
+    .ai-panel.expanded {
+      width: var(--panel-w-chat);
+    }
+
+    .ai-panel-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 18px;
+      border-bottom: 1px solid #edf2f7;
+      flex-shrink: 0;
+    }
+
+    .ai-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--navy);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .ai-panel-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    .ai-panel-subtitle {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .ai-close {
+      margin-left: auto;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1;
+      padding: 4px;
+      border-radius: 4px;
+      transition: color var(--transition);
+    }
+
+    .ai-close:hover { color: var(--navy); }
+
+    /* IDLE STATE */
+    .ai-idle {
+      flex: 1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .ai-idle-hint {
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      padding: 12px 0 4px;
+    }
+
+    .ai-suggestion {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px;
+      background: #f7fafd;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .ai-suggestion:hover { background: #edf3fb; }
+
+    .ai-sug-dot {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--bg);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .ai-sug-lines {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .ai-sug-line {
+      height: 10px;
+      background: #d0dce8;
+      border-radius: 5px;
+    }
+
+    .ai-sug-line:last-child { width: 65%; }
+
+    /* CHAT STATE */
+    .ai-chat {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .ai-chat.active {
+      display: flex;
+    }
+
+    .ai-context-bar {
+      background: #f0f6ff;
+      border-bottom: 1px solid #dde8f5;
+      padding: 8px 16px;
+      font-size: 12px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .ai-context-bar span {
+      color: var(--navy);
+      font-weight: 600;
+    }
+
+    .ai-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .ai-messages::-webkit-scrollbar { width: 4px; }
+    .ai-messages::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+
+    .msg {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .msg-ai {
+      background: var(--accent);
+      color: #fff;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+
+    .msg-user {
+      background: #edf2f7;
+      color: var(--navy);
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+
+    .msg-typing {
+      background: var(--accent);
+      color: #fff;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      padding: 12px 16px;
+    }
+
+    .dot-anim {
+      width: 7px;
+      height: 7px;
+      background: rgba(255,255,255,0.8);
+      border-radius: 50%;
+      animation: bounce 1.2s infinite;
+    }
+
+    .dot-anim:nth-child(2) { animation-delay: 0.2s; }
+    .dot-anim:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-5px); }
+    }
+
+    .ai-input-wrap {
+      padding: 12px 14px;
+      border-top: 1px solid #edf2f7;
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+
+    .ai-input {
+      flex: 1;
+      border: 1.5px solid #dde8f5;
+      border-radius: 20px;
+      padding: 10px 16px;
+      font-size: 14px;
+      resize: none;
+      outline: none;
+      max-height: 100px;
+      overflow-y: auto;
+      line-height: 1.4;
+      color: var(--navy);
+      transition: border-color var(--transition);
+      font-family: inherit;
+    }
+
+    .ai-input:focus { border-color: var(--accent); }
+
+    .ai-send {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background var(--transition);
+    }
+
+    .ai-send:hover { background: var(--accent-hover); }
+    .ai-send:disabled { background: var(--muted); cursor: default; }
+
+    .ai-send svg { color: #fff; }
+
+    /* ===== SCROLL ===== */
+    @media (max-width: 900px) {
+      .news-grid { grid-template-columns: 1fr; }
+      .ai-panel { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-item" data-topic="politics" onclick="toggleTopic(this)">
+      <span>Политика</span>
+      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
+    </div>
+    <div class="sidebar-item" data-topic="business" onclick="toggleTopic(this)">
+      <span>Бизнес</span>
+      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
+    </div>
+    <div class="sidebar-item" data-topic="tech" onclick="toggleTopic(this)">
+      <span>Технологии</span>
+      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
+    </div>
+    <div class="sidebar-item" data-topic="science" onclick="toggleTopic(this)">
+      <span>Наука</span>
+      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
+    </div>
+    <div class="sidebar-item" data-topic="health" onclick="toggleTopic(this)">
+      <span>Здоровье</span>
+      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
+    </div>
+    <div class="sidebar-item" data-topic="sports" onclick="toggleTopic(this)">
+      <span>Спорт</span>
+      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
+    </div>
+  </aside>
+
+  <!-- CENTER -->
+  <div class="content">
+    <div class="header">Актуальные новости</div>
+
+    <div class="inner">
+      <!-- Search -->
+      <div class="search-wrap">
+        <svg class="search-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input class="search-input" id="searchInput" type="text" placeholder="Поиск по новостям..." autocomplete="off" />
+        <button class="search-clear" id="searchClear" title="Очистить">×</button>
+      </div>
+
+      <!-- Cards -->
+      <div class="news-grid" id="newsGrid">
+        <div class="no-results" id="noResults">Ничего не найдено</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI PANEL -->
+  <aside class="ai-panel" id="aiPanel">
+    <div class="ai-panel-header">
+      <div class="ai-avatar">AI</div>
+      <div>
+        <div class="ai-panel-title">ИИ-ассистент</div>
+        <div class="ai-panel-subtitle">Задайте вопрос по новостям</div>
+      </div>
+      <button class="ai-close" id="aiClose" title="Свернуть" onclick="closeChat()">×</button>
+    </div>
+
+    <!-- Idle -->
+    <div class="ai-idle" id="aiIdle">
+      <div class="ai-idle-hint">Нажмите «Спросить» на карточке, чтобы начать диалог</div>
+      <div class="ai-suggestion"><div class="ai-sug-dot"></div><div class="ai-sug-lines"><div class="ai-sug-line"></div><div class="ai-sug-line"></div></div></div>
+      <div class="ai-suggestion"><div class="ai-sug-dot"></div><div class="ai-sug-lines"><div class="ai-sug-line"></div><div class="ai-sug-line"></div></div></div>
+    </div>
+
+    <!-- Chat -->
+    <div class="ai-chat" id="aiChat">
+      <div class="ai-context-bar" id="aiContextBar">Контекст: <span id="aiContextTitle">—</span></div>
+      <div class="ai-messages" id="aiMessages"></div>
+      <div class="ai-input-wrap">
+        <textarea class="ai-input" id="aiInput" rows="1" placeholder="Введите вопрос..."></textarea>
+        <button class="ai-send" id="aiSendBtn" onclick="sendMessage()">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+  // ============================
+  // MOCK DATA
+  // ============================
+  const ARTICLES = [
+    {
+      id: 1,
+      topic: 'politics',
+      title: 'Государственная Дума приняла поправки к закону о цифровых активах',
+      summary: 'Депутаты в третьем чтении одобрили поправки, регулирующие оборот криптовалют и цифровых финансовых активов на территории России.',
+      source: 'https://example.com/article/1',
+      sourceName: 'Российская газета',
+    },
+    {
+      id: 2,
+      topic: 'business',
+      title: 'Нефтяные котировки выросли на фоне сокращения добычи ОПЕК+',
+      summary: 'Цена Brent поднялась выше 88 долларов за баррель после того, как страны картеля подтвердили продление ограничений добычи до конца квартала.',
+      source: 'https://example.com/article/2',
+      sourceName: 'РБК',
+    },
+    {
+      id: 3,
+      topic: 'tech',
+      title: 'Сбербанк представил новую языковую модель GigaChat 2.0',
+      summary: 'На конференции AI Journey банк продемонстрировал обновлённую версию собственной LLM с улучшенным рассуждением и поддержкой мультимодальных запросов.',
+      source: 'https://example.com/article/3',
+      sourceName: 'VC.ru',
+    },
+    {
+      id: 4,
+      topic: 'science',
+      title: 'Российские учёные синтезировали новый сверхпроводящий материал',
+      summary: 'Команда физиков из МГУ и МФТИ сообщила о получении соединения, проявляющего сверхпроводимость при температуре −70 °C — рекорд для купратной группы.',
+      source: 'https://example.com/article/4',
+      sourceName: 'Наука и жизнь',
+    },
+    {
+      id: 5,
+      topic: 'health',
+      title: 'ВОЗ обновила рекомендации по лечению резистентного туберкулёза',
+      summary: 'Всемирная организация здравоохранения сократила стандартный курс терапии с 20 до 6 месяцев благодаря новым комбинациям антибиотиков.',
+      source: 'https://example.com/article/5',
+      sourceName: 'Медвестник',
+    },
+    {
+      id: 6,
+      topic: 'sports',
+      title: 'Сборная России по хоккею обыграла Финляндию в финале турнира',
+      summary: 'Со счётом 3:1 российские хоккеисты завоевали золотые медали международного турнира, прервав серию поражений в финальных матчах.',
+      source: 'https://example.com/article/6',
+      sourceName: 'Спорт-Экспресс',
+    },
+    {
+      id: 7,
+      topic: 'business',
+      title: 'ЦБ сохранил ключевую ставку на уровне 16% третий раз подряд',
+      summary: 'Банк России обосновал решение устойчивым замедлением инфляции, однако предупредил о возможном повышении в случае ускорения роста цен.',
+      source: 'https://example.com/article/7',
+      sourceName: 'Коммерсантъ',
+    },
+    {
+      id: 8,
+      topic: 'tech',
+      title: 'Яндекс запустил беспилотное такси в Екатеринбурге',
+      summary: 'Сервис «Яндекс.Роботакси» начал коммерческую эксплуатацию в третьем городе России. Автомобили работают без оператора на борту в дневное время.',
+      source: 'https://example.com/article/8',
+      sourceName: 'Хабр',
+    },
+  ];
+
+  const TOPIC_LABELS = {
+    politics: 'Политика',
+    business: 'Бизнес',
+    tech: 'Технологии',
+    science: 'Наука',
+    health: 'Здоровье',
+    sports: 'Спорт',
+  };
+
+  // ============================
+  // STATE
+  // ============================
+  let activeTopic = null;
+  let searchQuery = '';
+  let currentArticleId = null;
+  let chatHistory = [];
+  let isTyping = false;
+
+  // ============================
+  // RENDER
+  // ============================
+  function renderCards() {
+    const grid = document.getElementById('newsGrid');
+    const noResults = document.getElementById('noResults');
+
+    // Remove existing cards
+    grid.querySelectorAll('.card').forEach(el => el.remove());
+
+    const q = searchQuery.toLowerCase().trim();
+
+    let anyVisible = false;
+
+    ARTICLES.forEach(article => {
+      const matchesTopic = !activeTopic || article.topic === activeTopic;
+      const matchesSearch = !q
+        || article.title.toLowerCase().includes(q)
+        || article.summary.toLowerCase().includes(q);
+
+      const card = buildCard(article);
+
+      if (!matchesTopic) {
+        card.classList.add('dimmed');
+      } else if (q && !matchesSearch) {
+        card.classList.add('dimmed');
+      } else {
+        anyVisible = true;
+      }
+
+      grid.appendChild(card);
+    });
+
+    noResults.style.display = (q && !anyVisible && activeTopic === null) ? 'block' : 'none';
+  }
+
+  function buildCard(article) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.id = article.id;
+
+    card.innerHTML = `
+      <div class="card-body">
+        <span class="card-tag">${TOPIC_LABELS[article.topic]}</span>
+        <div class="card-title">${article.title}</div>
+      </div>
+      <div class="card-actions">
+        <button class="btn btn-ask" onclick="askAgent(${article.id})">Спросить агента</button>
+        <button class="btn btn-more" onclick="toggleExpand(${article.id}, this)">Подробнее</button>
+      </div>
+      <div class="card-expand" id="expand-${article.id}">
+        <p>${article.summary}</p>
+        <a href="${article.source}" target="_blank" rel="noopener">
+          Читать источник →
+        </a>
+      </div>
+    `;
+
+    return card;
+  }
+
+  // ============================
+  // EXPAND
+  // ============================
+  function toggleExpand(id, btn) {
+    const el = document.getElementById(`expand-${id}`);
+    const isOpen = el.classList.toggle('open');
+    btn.textContent = isOpen ? 'Свернуть' : 'Подробнее';
+  }
+
+  // ============================
+  // TOPIC FILTER
+  // ============================
+  function toggleTopic(el) {
+    const topic = el.dataset.topic;
+    if (activeTopic === topic) {
+      activeTopic = null;
+      el.classList.remove('active');
+    } else {
+      document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+      activeTopic = topic;
+      el.classList.add('active');
+    }
+    renderCards();
+  }
+
+  function clearTopic(event, el) {
+    event.stopPropagation();
+    activeTopic = null;
+    el.classList.remove('active');
+    renderCards();
+  }
+
+  // ============================
+  // SEARCH
+  // ============================
+  const searchInput = document.getElementById('searchInput');
+  const searchClear = document.getElementById('searchClear');
+
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value;
+    searchClear.classList.toggle('visible', searchQuery.length > 0);
+    renderCards();
+  });
+
+  searchClear.addEventListener('click', () => {
+    searchInput.value = '';
+    searchQuery = '';
+    searchClear.classList.remove('visible');
+    searchInput.focus();
+    renderCards();
+  });
+
+  // ============================
+  // CHAT
+  // ============================
+  function askAgent(articleId) {
+    const article = ARTICLES.find(a => a.id === articleId);
+    if (!article) return;
+
+    currentArticleId = articleId;
+    chatHistory = [];
+
+    document.getElementById('aiContextTitle').textContent = article.title;
+    document.getElementById('aiMessages').innerHTML = '';
+    document.getElementById('aiIdle').style.display = 'none';
+    document.getElementById('aiChat').classList.add('active');
+    document.getElementById('aiPanel').classList.add('expanded');
+    document.getElementById('aiInput').focus();
+
+    appendMessage('ai', `Я готов ответить на вопросы по статье «${article.title}». Что вас интересует?`);
+  }
+
+  function closeChat() {
+    document.getElementById('aiChat').classList.remove('active');
+    document.getElementById('aiPanel').classList.remove('expanded');
+    document.getElementById('aiIdle').style.display = 'flex';
+    currentArticleId = null;
+    chatHistory = [];
+  }
+
+  function appendMessage(role, text) {
+    const msgs = document.getElementById('aiMessages');
+    const div = document.createElement('div');
+    div.className = `msg msg-${role}`;
+    div.textContent = text;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+    return div;
+  }
+
+  function showTyping() {
+    const msgs = document.getElementById('aiMessages');
+    const div = document.createElement('div');
+    div.className = 'msg-typing';
+    div.id = 'typingIndicator';
+    div.innerHTML = '<div class="dot-anim"></div><div class="dot-anim"></div><div class="dot-anim"></div>';
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function removeTyping() {
+    const el = document.getElementById('typingIndicator');
+    if (el) el.remove();
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('aiInput');
+    const text = input.value.trim();
+    if (!text || isTyping) return;
+
+    input.value = '';
+    input.style.height = 'auto';
+    appendMessage('user', text);
+    chatHistory.push({ role: 'user', content: text });
+
+    isTyping = true;
+    document.getElementById('aiSendBtn').disabled = true;
+    showTyping();
+
+    try {
+      // Если статья есть в контексте — добавим её в запрос
+      const article = ARTICLES.find(a => a.id === currentArticleId);
+      const context = article ? `[Статья: ${article.title}]\n${article.summary}\n\n` : '';
+      const query = context + text;
+
+      const resp = await fetch('/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, top_k: 5 }),
+      });
+
+      removeTyping();
+
+      if (resp.ok) {
+        const data = await resp.json();
+        const answer = data.answer || 'Не удалось получить ответ.';
+        appendMessage('ai', answer);
+        chatHistory.push({ role: 'assistant', content: answer });
+      } else {
+        appendMessage('ai', 'Произошла ошибка при обращении к серверу. Попробуйте ещё раз.');
+      }
+    } catch {
+      removeTyping();
+      appendMessage('ai', 'Не удалось подключиться к серверу. Проверьте, что бэкенд запущен.');
+    } finally {
+      isTyping = false;
+      document.getElementById('aiSendBtn').disabled = false;
+    }
+  }
+
+  // Enter to send (Shift+Enter for newline)
+  document.getElementById('aiInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // Auto-resize textarea
+  document.getElementById('aiInput').addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+  });
+
+  // ============================
+  // INIT
+  // ============================
+  renderCards();
+</script>
+</body>
+</html>

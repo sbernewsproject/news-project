@@ -17,6 +17,7 @@ psycopg2-binary>=2.9
 fastapi>=0.111
 uvicorn[standard]>=0.30
 pydantic>=2.7
+aiofiles>=23.0
 
 # --- frontend ---
 streamlit>=1.35
