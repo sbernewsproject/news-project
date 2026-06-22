@@ -8,11 +8,11 @@
   BATCH_SIZE    — 256
 """
 
+import asyncio
 import os
 import sys
 
-import psycopg2
-import psycopg2.extras
+import asyncpg
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -23,14 +23,25 @@ QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "256"))
 
 
-def iter_chunks(conn, batch_size: int):
-    with conn.cursor(name="chunks_cursor", cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("SELECT chunk_id, article_id, chunk_text, payload FROM chunk ORDER BY chunk_id")
+async def main() -> None:
+    print(f"Подключение к Postgres: {POSTGRES_DSN}")
+    print(f"Qdrant: {QDRANT_URL}")
+
+    conn = await asyncpg.connect(POSTGRES_DSN)
+    try:
+        indexer = NewsIndexer(qdrant_url=QDRANT_URL)
+        total = 0
+        offset = 0
+
         while True:
-            rows = cur.fetchmany(batch_size)
+            rows = await conn.fetch(
+                "SELECT chunk_id, article_id, chunk_text, payload FROM chunk ORDER BY chunk_id LIMIT $1 OFFSET $2",
+                BATCH_SIZE, offset,
+            )
             if not rows:
                 break
-            yield [
+
+            batch = [
                 IndexableChunk(
                     chunk_id=row["chunk_id"],
                     article_id=row["article_id"],
@@ -39,26 +50,15 @@ def iter_chunks(conn, batch_size: int):
                 )
                 for row in rows
             ]
-
-
-def main() -> None:
-    print(f"Подключение к Postgres: {POSTGRES_DSN}")
-    print(f"Qdrant: {QDRANT_URL}")
-
-    conn = psycopg2.connect(POSTGRES_DSN)
-    try:
-        indexer = NewsIndexer(qdrant_url=QDRANT_URL)
-
-        total = 0
-        for batch in iter_chunks(conn, BATCH_SIZE):
             indexer.index(batch)
             total += len(batch)
+            offset += len(batch)
             print(f"  Проиндексировано: {total} чанков", end="\r")
 
         print(f"\nГотово. Всего проиндексировано: {total} чанков.")
     finally:
-        conn.close()
+        await conn.close()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

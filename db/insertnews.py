@@ -36,27 +36,6 @@ async def insert_article(conn, item: dict, types_id: int) -> int:
         types_id,
     )
 
-def insert_chunks(cursor, chunks) -> list[int]:
-    """Вставляет чанки в Postgres и возвращает реальные chunk_id."""
-    chunk_ids = []
-    for chunk in chunks:
-        cursor.execute("""
-            INSERT INTO chunk (article_id, chunk_text, payload)
-            VALUES (%s, %s, %s)
-            RETURNING chunk_id
-        """, (
-            chunk.article_id,
-            chunk.text,
-            json.dumps({
-                "chunk_index": chunk.chunk_index,
-                "source": chunk.payload["source"],
-                "published_at": chunk.payload["published_at"],
-                "content_hash": chunk.payload["content_hash"],
-            }),
-        ))
-        chunk_ids.append(cursor.fetchone()[0])
-    return chunk_ids
-
 async def process(json_path: str) -> None:
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
