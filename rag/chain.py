@@ -96,20 +96,23 @@ def _verify_citations(answer: str, num_docs: int) -> list[int]:
 
 async def _generate(context: str, query: str) -> str:
     user_msg = f"Контекст:\n{context}\n\nЗапрос: {query}"
-    async with httpx.AsyncClient(timeout=180) as client:
-        resp = await client.post(
-            f"{OLLAMA_URL}/api/chat",
-            json={
-                "model": OLLAMA_MODEL,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_msg},
-                ],
-                "stream": False,
-            },
-        )
-        resp.raise_for_status()
-        return resp.json()["message"]["content"]
+    try:
+        async with httpx.AsyncClient(timeout=180) as client:
+            resp = await client.post(
+                f"{OLLAMA_URL}/api/chat",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    "stream": False,
+                },
+            )
+            resp.raise_for_status()
+            return resp.json()["message"]["content"]
+    except Exception:
+        return f"[Ollama недоступен] Найдено {context.count('<doc')} релевантных фрагментов. Настройте OLLAMA_URL для генерации ответа."
 
 
 class RAGChain:
@@ -129,15 +132,23 @@ class RAGChain:
             return "Недостаточно данных в базе знаний."
 
         if route == "global":
-            chunks, graph_ctx = await asyncio.gather(
-                _fetch_chunks(chunk_ids),
-                global_search(query),
-            )
+            try:
+                chunks, graph_ctx = await asyncio.gather(
+                    _fetch_chunks(chunk_ids),
+                    global_search(query),
+                )
+            except Exception:
+                chunks = await _fetch_chunks(chunk_ids)
+                graph_ctx = None
         elif route == "local":
-            chunks, graph_ctx = await asyncio.gather(
-                _fetch_chunks(chunk_ids),
-                local_search(query),
-            )
+            try:
+                chunks, graph_ctx = await asyncio.gather(
+                    _fetch_chunks(chunk_ids),
+                    local_search(query),
+                )
+            except Exception:
+                chunks = await _fetch_chunks(chunk_ids)
+                graph_ctx = None
         else:
             chunks = await _fetch_chunks(chunk_ids)
             graph_ctx = None

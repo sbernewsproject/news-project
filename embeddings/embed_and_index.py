@@ -63,12 +63,12 @@ class NewsIndexer:
         # возвращает (chunk_id, score) в порядке убывания релевантности
         # не тянем текст чанков, тексты отдельно в Postgres
         vector = self._embed_query(query)
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=COLLECTION,
-            query_vector=vector,
+            query=vector,
             limit=top_k,
         )
-        return [(r.id, r.score) for r in results]
+        return [(r.id, r.score) for r in results.points]
 
     def _embed_passages(self, texts: list[str]) -> list[list[float]]:
         prefixed = [f"passage: {t}" for t in texts]

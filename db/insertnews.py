@@ -77,3 +77,4 @@ async def process(json_path: str) -> None:
 
 if __name__ == "__main__":
     asyncio.run(process("parsed_articles.json"))
+
