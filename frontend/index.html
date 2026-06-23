@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
   <title>Актуальные новости</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -26,17 +26,99 @@
       --transition: 0.25s ease;
     }
 
-    html, body {
+    html {
       height: 100%;
+      width: 100%;
+    }
+
+    body {
+      height: 100%;
+      width: 100%;
       font-family: 'Segoe UI', Arial, sans-serif;
       background: var(--bg);
       color: var(--navy);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
     }
 
     /* ===== LAYOUT ===== */
     .app {
       display: flex;
+      flex-direction: column;
+      height: 100%;
       height: 100vh;
+      height: -webkit-fill-available;
+      overflow: hidden;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      font-family: 'Trendy', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--navy);
+      color: #fff;
+      padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+      font-size: clamp(16px, 4vw, 22px);
+      font-weight: 950;
+      letter-spacing: 8px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 20;
+    }
+
+    .header-title {
+      flex: 1;
+      text-align: center;
+      padding: 0 44px;
+    }
+
+    /* ===== MENU TOGGLE (HAMBURGER) ===== */
+    .menu-toggle {
+      display: none;
+      width: 44px;
+      height: 44px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      padding: 0;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 210;
+    }
+
+    .menu-toggle span {
+      display: block;
+      width: 26px;
+      height: 3px;
+      background: #fff;
+      border-radius: 2px;
+      transition: transform var(--transition), opacity var(--transition);
+    }
+
+    .menu-toggle.active span:nth-child(1) {
+      transform: translateY(9px) rotate(45deg);
+    }
+
+    .menu-toggle.active span:nth-child(2) {
+      opacity: 0;
+    }
+
+    .menu-toggle.active span:nth-child(3) {
+      transform: translateY(-9px) rotate(-45deg);
+    }
+
+    /* ===== BODY ROW ===== */
+    .body-row {
+      flex: 1;
+      display: flex;
+      min-height: 0;
       overflow: hidden;
     }
 
@@ -127,6 +209,22 @@
 
     .sidebar-reset.visible { display: block; }
 
+    /* ===== SIDEBAR OVERLAY (MOBILE) ===== */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 150;
+      opacity: 0;
+      transition: opacity var(--transition);
+    }
+
+    .sidebar-overlay.visible {
+      display: block;
+      opacity: 1;
+    }
+
     /* ===== CENTER CONTENT ===== */
     .content {
       flex: 1;
@@ -136,25 +234,14 @@
       overflow: hidden;
     }
 
-    .header {
-      background: var(--navy);
-      color: #fff;
-      text-align: center;
-      padding: 20px 32px;
-      font-size: 28px;
-      font-weight: 900;
-      letter-spacing: 3px;
-      text-transform: uppercase;
-      flex-shrink: 0;
-    }
-
     .inner {
       flex: 1;
       display: flex;
       flex-direction: column;
-      padding: 20px 24px;
+      padding: clamp(12px, 2.5vw, 20px) clamp(12px, 3vw, 24px);
       gap: 16px;
       overflow: hidden;
+      min-height: 0;
     }
 
     /* ===== SEARCH ===== */
@@ -245,7 +332,6 @@
       transition: opacity var(--transition), transform var(--transition), filter var(--transition);
     }
 
-    /* Карточки, не подходящие под текущий фильтр/поиск, полностью скрываются */
     .card.hidden {
       display: none;
     }
@@ -298,26 +384,29 @@
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
-      transition: background var(--transition), color var(--transition);
+      transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
     }
 
-    .btn-ask {
-      background: rgba(255,255,255,0.15);
-      color: #fff;
-    }
+    .btn-ask, .btn-more {
+  background: linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.1) 100%);
+  box-shadow:
+    0 3px 0 rgba(0,0,0,0.35),
+    0 5px 10px rgba(0,0,0,0.15);
+  border-top: 1px solid rgba(255,255,255,0.35);
+  border-bottom: 1px solid rgba(0,0,0,0.2);
+  color: #fff;
+}
 
-    .btn-ask:hover {
-      background: var(--accent);
-    }
+.btn-ask:hover, .btn-more:hover {
+  background: linear-gradient(180deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.18) 100%);
+}
 
-    .btn-more {
-      background: rgba(255,255,255,0.15);
-      color: #fff;
-    }
-
-    .btn-more:hover {
-      background: rgba(255,255,255,0.28);
-    }
+.btn-ask:active, .btn-more:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 1px 0 rgba(0,0,0,0.35),
+    0 2px 4px rgba(0,0,0,0.15);
+}
 
     /* ===== EXPAND PANEL ===== */
     .card-expand {
@@ -365,8 +454,8 @@
     .ai-panel {
       width: var(--panel-w);
       background: var(--white);
-      border-radius: var(--radius) 0 0 var(--radius);
-      margin: 16px 16px 16px 0;
+      border-radius: var(--radius);
+      margin: 16px;
       display: flex;
       flex-direction: column;
       box-shadow: var(--shadow);
@@ -413,15 +502,37 @@
       color: var(--muted);
     }
 
-    .ai-close {
+    .ai-header-actions {
       margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .ai-clear-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      padding: 6px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color var(--transition), background var(--transition);
+    }
+
+    .ai-clear-btn:hover { color: var(--navy); background: #f0f4f9; }
+
+    .ai-close {
       background: none;
       border: none;
       cursor: pointer;
       color: var(--muted);
       font-size: 20px;
       line-height: 1;
-      padding: 4px;
+      padding: 4px 6px;
       border-radius: 4px;
       transition: color var(--transition);
     }
@@ -435,20 +546,54 @@
       display: flex;
       flex-direction: column;
       gap: 12px;
+      overflow-y: auto;
     }
 
     .ai-idle-hint {
       font-size: 13px;
       color: var(--muted);
       text-align: center;
-      padding: 12px 0 4px;
+      padding: 4px 4px 4px;
+      line-height: 1.5;
+    }
+
+    .ai-idle-cta {
+      width: 100%;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .ai-idle-cta:hover { background: var(--accent-hover); }
+
+    .ai-idle-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      margin: 4px 0;
+    }
+
+    .ai-idle-divider::before,
+    .ai-idle-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #e3eaf2;
     }
 
     .ai-suggestion {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       gap: 10px;
-      padding: 12px;
+      padding: 12px 14px;
       background: #f7fafd;
       border-radius: 10px;
       cursor: pointer;
@@ -457,29 +602,24 @@
 
     .ai-suggestion:hover { background: #edf3fb; }
 
-    .ai-sug-dot {
+    .ai-sug-icon {
       width: 32px;
       height: 32px;
       border-radius: 50%;
       background: var(--bg);
       flex-shrink: 0;
-      margin-top: 2px;
-    }
-
-    .ai-sug-lines {
-      flex: 1;
       display: flex;
-      flex-direction: column;
-      gap: 6px;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
     }
 
-    .ai-sug-line {
-      height: 10px;
-      background: #d0dce8;
-      border-radius: 5px;
+    .ai-sug-text {
+      flex: 1;
+      font-size: 13px;
+      color: var(--navy);
+      line-height: 1.4;
     }
-
-    .ai-sug-line:last-child { width: 65%; }
 
     /* CHAT STATE */
     .ai-chat {
@@ -487,6 +627,7 @@
       flex: 1;
       flex-direction: column;
       overflow: hidden;
+      min-height: 0;
     }
 
     .ai-chat.active {
@@ -494,26 +635,62 @@
     }
 
     .ai-context-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       background: #f0f6ff;
       border-bottom: 1px solid #dde8f5;
-      padding: 8px 16px;
+      padding: 10px 12px 10px 16px;
       font-size: 12px;
       color: var(--muted);
       flex-shrink: 0;
     }
 
-    .ai-context-bar span {
+    .ai-context-bar span#aiContextTitle,
+    .ai-context-bar > span > span {
       color: var(--navy);
       font-weight: 600;
+    }
+
+    .ai-context-bar > span:first-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .context-clear-btn {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(74,144,217,0.18);
+      color: var(--navy);
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background var(--transition);
+    }
+
+    .context-clear-btn:hover {
+      background: var(--accent);
+      color: #fff;
     }
 
     .ai-messages {
       flex: 1;
       overflow-y: auto;
+      overflow-x: hidden;
       padding: 16px;
       display: flex;
       flex-direction: column;
       gap: 12px;
+      -webkit-overflow-scrolling: touch;
     }
 
     .ai-messages::-webkit-scrollbar { width: 4px; }
@@ -525,6 +702,7 @@
       border-radius: 16px;
       font-size: 14px;
       line-height: 1.5;
+      word-wrap: break-word;
     }
 
     .msg-ai {
@@ -539,6 +717,16 @@
       color: var(--navy);
       align-self: flex-end;
       border-bottom-right-radius: 4px;
+    }
+
+    .msg-system {
+      align-self: center;
+      background: none;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+      padding: 4px 12px;
+      max-width: 100%;
     }
 
     .msg-typing {
@@ -570,11 +758,13 @@
 
     .ai-input-wrap {
       padding: 12px 14px;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
       border-top: 1px solid #edf2f7;
       display: flex;
       gap: 8px;
       align-items: flex-end;
       flex-shrink: 0;
+      background: #fff;
     }
 
     .ai-input {
@@ -591,13 +781,14 @@
       color: var(--navy);
       transition: border-color var(--transition);
       font-family: inherit;
+      -webkit-appearance: none;
     }
 
     .ai-input:focus { border-color: var(--accent); }
 
     .ai-send {
-      width: 38px;
-      height: 38px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       background: var(--accent);
       border: none;
@@ -614,98 +805,373 @@
 
     .ai-send svg { color: #fff; }
 
-    /* ===== SCROLL ===== */
-    @media (max-width: 900px) {
-      .news-grid { grid-template-columns: 1fr; }
-      .ai-panel { display: none; }
+    /* ===== FLOATING CHAT BUTTON ===== */
+    .ai-fab {
+      display: none;
+      position: fixed;
+      right: 16px;
+      bottom: max(16px, env(safe-area-inset-bottom));
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+      z-index: 90;
+      transition: background var(--transition), transform var(--transition);
+    }
+
+    .ai-fab:hover { background: var(--accent-hover); }
+    .ai-fab:active { transform: scale(0.94); }
+
+    /* ============================
+       RESPONSIVE
+       ============================ */
+
+    /* Ноутбуки и небольшие десктопы */
+    @media (max-width: 1280px) {
+      :root {
+        --sidebar-w: 200px;
+        --panel-w: 260px;
+        --panel-w-chat: 360px;
+      }
+    }
+
+    /* Планшеты и небольшие ноутбуки */
+    @media (max-width: 1100px) {
+      :root {
+        --panel-w: 230px;
+        --panel-w-chat: 320px;
+      }
+    }
+
+    /* Планшеты и телефоны: боковое меню скрыто, открывается по кнопке-гамбургер */
+    @media (max-width: 860px) {
+      .menu-toggle {
+        display: flex;
+      }
+
+      .sidebar {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 280px;
+        max-width: 80vw;
+        z-index: 200;
+        transform: translateX(100%);
+        transition: transform var(--transition);
+        padding-top: max(80px, env(safe-area-inset-top));
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .sidebar.mobile-open {
+        transform: translateX(0);
+      }
+
+      .sidebar-item {
+        padding: 14px 28px;
+        font-size: 18px;
+        white-space: normal;
+      }
+
+      .sidebar-item.active::before {
+        display: block;
+      }
+
+      .sidebar-item.active {
+        background: rgba(255,255,255,0.12);
+      }
+
+      .sidebar-reset {
+        margin: 16px 28px 0;
+        padding: 8px 0;
+        border-top: 1px solid rgba(255,255,255,0.12);
+        padding-top: 14px;
+      }
+
+      /* AI Panel - Mobile Full Screen */
+      .ai-panel {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 100%;
+        height: -webkit-fill-available;
+        margin: 0;
+        border-radius: 0;
+        z-index: 100;
+        flex-direction: column;
+      }
+
+      .ai-panel.mobile-open {
+        display: flex;
+      }
+
+      .ai-panel-header {
+        padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+        background: #fff;
+        border-bottom: 1px solid #edf2f7;
+      }
+
+      .ai-idle {
+        padding: 16px;
+        padding-top: max(16px, env(safe-area-inset-top));
+      }
+
+      .ai-messages {
+        padding: 12px 16px;
+        padding-bottom: max(12px, env(safe-area-inset-bottom));
+      }
+
+      .ai-fab {
+        display: flex;
+      }
+
+      .msg {
+        max-width: 90%;
+        font-size: 15px;
+      }
+    }
+
+    /* Телефоны: одна колонка карточек */
+    @media (max-width: 640px) {
+      .news-grid { grid-template-columns: 1fr; gap: 10px; }
+
+      .search-input {
+        padding: 12px 40px 12px 44px;
+        font-size: 15px;
+      }
+
+      .card-title { font-size: 14px; }
+
+      .card-actions { flex-wrap: wrap; }
+
+      .btn { padding: 7px 14px; font-size: 12.5px; }
+
+      .ai-panel-header {
+        padding: max(12px, env(safe-area-inset-top)) 12px 12px;
+      }
+
+      .ai-messages {
+        padding: 10px 12px;
+      }
+
+      .header {
+        padding: max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
+        font-size: 16px;
+      }
+
+      .header-title {
+        padding: 0 40px;
+      }
+
+      .menu-toggle {
+        width: 40px;
+        height: 40px;
+      }
+
+      .menu-toggle span {
+        width: 22px;
+        height: 2.5px;
+      }
+
+      .ai-idle-hint {
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .ai-idle-cta {
+        padding: 14px 18px;
+        font-size: 15px;
+      }
+
+      .ai-suggestion {
+        padding: 14px 16px;
+      }
+
+      .ai-input-wrap {
+        padding: 10px 12px;
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
+      }
+
+      .ai-input {
+        font-size: 16px; /* Prevents zoom on iOS */
+        padding: 12px 14px;
+      }
+
+      .ai-send {
+        width: 44px;
+        height: 44px;
+      }
+    }
+
+    /* Очень маленькие экраны */
+    @media (max-width: 380px) {
+      .sidebar-item { font-size: 16px; padding: 12px 24px; }
+      .card-body { padding: 14px 14px 10px; }
+      .card-actions { padding: 0 14px 14px; }
+      .ai-fab { width: 52px; height: 52px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); }
+
+      .msg {
+        font-size: 14px;
+        padding: 9px 12px;
+      }
+    }
+
+    /* iPhone landscape */
+    @media (max-height: 500px) and (orientation: landscape) {
+      .ai-panel-header {
+        padding: 8px 12px;
+      }
+
+      .ai-idle {
+        padding: 8px 12px;
+      }
+
+      .ai-messages {
+        padding: 8px 12px;
+      }
+
+      .ai-input-wrap {
+        padding: 8px 12px;
+      }
     }
   </style>
 </head>
 <body>
 <div class="app">
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-item" data-topic="politics" onclick="toggleTopic(this)">
-      <span>Политика</span>
-      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-    </div>
-    <div class="sidebar-item" data-topic="business" onclick="toggleTopic(this)">
-      <span>Бизнес</span>
-      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-    </div>
-    <div class="sidebar-item" data-topic="tech" onclick="toggleTopic(this)">
-      <span>Технологии</span>
-      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-    </div>
-    <div class="sidebar-item" data-topic="science" onclick="toggleTopic(this)">
-      <span>Наука</span>
-      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-    </div>
-    <div class="sidebar-item" data-topic="health" onclick="toggleTopic(this)">
-      <span>Здоровье</span>
-      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-    </div>
-    <div class="sidebar-item" data-topic="sports" onclick="toggleTopic(this)">
-      <span>Спорт</span>
-      <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-    </div>
-    <div class="sidebar-reset" id="sidebarReset" onclick="resetTopics()">Сбросить фильтры</div>
-  </aside>
-
-  <!-- CENTER -->
-  <div class="content">
-    <div class="header">Актуальные новости</div>
-
-    <div class="inner">
-      <!-- Search -->
-      <div class="search-wrap">
-        <svg class="search-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
-        <input class="search-input" id="searchInput" type="text" placeholder="Поиск по новостям..." autocomplete="off" />
-        <button class="search-clear" id="searchClear" title="Очистить">×</button>
-      </div>
-
-      <!-- Cards -->
-      <div class="news-grid" id="newsGrid">
-        <div class="no-results" id="noResults">Ничего не найдено</div>
-      </div>
-    </div>
+  <!-- HEADER -->
+  <div class="header">
+    <span class="header-title">Актуальные новости</span>
+    <button class="menu-toggle" id="menuToggle" onclick="toggleMenu()" aria-label="Открыть меню">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
   </div>
 
-  <!-- AI PANEL -->
-  <aside class="ai-panel" id="aiPanel">
-    <div class="ai-panel-header">
-      <div class="ai-avatar">AI</div>
-      <div>
-        <div class="ai-panel-title">ИИ-ассистент</div>
-        <div class="ai-panel-subtitle">Задайте вопрос по новостям</div>
+  <!-- OVERLAY FOR MOBILE MENU -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMenu()"></div>
+
+  <!-- BODY ROW -->
+  <div class="body-row">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-item" data-topic="politics" onclick="toggleTopic(this)">
+        <span>Политика</span>
+        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
       </div>
-      <button class="ai-close" id="aiClose" title="Свернуть" onclick="closeChat()">×</button>
-    </div>
+      <div class="sidebar-item" data-topic="business" onclick="toggleTopic(this)">
+        <span>Бизнес</span>
+        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
+      </div>
+      <div class="sidebar-item" data-topic="tech" onclick="toggleTopic(this)">
+        <span>Технологии</span>
+        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
+      </div>
+      <div class="sidebar-item" data-topic="science" onclick="toggleTopic(this)">
+        <span>Наука</span>
+        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
+      </div>
+      <div class="sidebar-item" data-topic="health" onclick="toggleTopic(this)">
+        <span>Здоровье</span>
+        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
+      </div>
+      <div class="sidebar-item" data-topic="sports" onclick="toggleTopic(this)">
+        <span>Спорт</span>
+        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
+      </div>
+      <div class="sidebar-reset" id="sidebarReset" onclick="resetTopics()">Сбросить фильтры</div>
+    </aside>
 
-    <!-- Idle -->
-    <div class="ai-idle" id="aiIdle">
-      <div class="ai-idle-hint">Нажмите «Спросить» на карточке, чтобы начать диалог</div>
-      <div class="ai-suggestion"><div class="ai-sug-dot"></div><div class="ai-sug-lines"><div class="ai-sug-line"></div><div class="ai-sug-line"></div></div></div>
-      <div class="ai-suggestion"><div class="ai-sug-dot"></div><div class="ai-sug-lines"><div class="ai-sug-line"></div><div class="ai-sug-line"></div></div></div>
-    </div>
-
-    <!-- Chat -->
-    <div class="ai-chat" id="aiChat">
-      <div class="ai-context-bar" id="aiContextBar">Контекст: <span id="aiContextTitle">—</span></div>
-      <div class="ai-messages" id="aiMessages"></div>
-      <div class="ai-input-wrap">
-        <textarea class="ai-input" id="aiInput" rows="1" placeholder="Введите вопрос..."></textarea>
-        <button class="ai-send" id="aiSendBtn" onclick="sendMessage()">
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-            <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+    <!-- CENTER -->
+    <div class="content">
+      <div class="inner">
+        <!-- Search -->
+        <div class="search-wrap">
+          <svg class="search-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
           </svg>
-        </button>
+          <input class="search-input" id="searchInput" type="text" placeholder="Поиск по новостям..." autocomplete="off" />
+          <button class="search-clear" id="searchClear" title="Очистить">×</button>
+        </div>
+
+        <!-- Cards -->
+        <div class="news-grid" id="newsGrid">
+          <div class="no-results" id="noResults">Ничего не найдено</div>
+        </div>
       </div>
     </div>
-  </aside>
+
+    <!-- AI PANEL -->
+    <aside class="ai-panel" id="aiPanel">
+      <div class="ai-panel-header">
+        <div class="ai-avatar">AI</div>
+        <div style="flex: 1; min-width: 0;">
+          <div class="ai-panel-title">ИИ-ассистент</div>
+          <div class="ai-panel-subtitle">Задайте вопрос по новостям</div>
+        </div>
+        <div class="ai-header-actions">
+          <button class="ai-clear-btn" id="aiClearBtn" title="Очистить историю чата" onclick="confirmClearChat()">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>
+            </svg>
+          </button>
+          <button class="ai-close" id="aiClose" title="Свернуть" onclick="closeChat()">×</button>
+        </div>
+      </div>
+
+      <!-- Idle -->
+      <div class="ai-idle" id="aiIdle">
+        <div class="ai-idle-hint">Задайте общий вопрос ассистенту в любой момент, или нажмите «Спросить агента» на карточке конкретной новости — тогда он ответит с учётом контекста статьи.</div>
+        <button class="ai-idle-cta" onclick="openGeneralChat()">Задать вопрос ассистенту</button>
+        <div class="ai-idle-divider">примеры вопросов</div>
+        <div class="ai-suggestion" onclick="openGeneralChat('Какие сегодня главные новости?')">
+          <div class="ai-sug-icon">📰</div>
+          <div class="ai-sug-text">Какие сегодня главные новости?</div>
+        </div>
+        <div class="ai-suggestion" onclick="openGeneralChat('Расскажи об актуальных событиях в сфере технологий')">
+          <div class="ai-sug-icon">💡</div>
+          <div class="ai-sug-text">Расскажи об актуальных событиях в сфере технологий</div>
+        </div>
+      </div>
+
+      <!-- Chat -->
+      <div class="ai-chat" id="aiChat">
+        <div class="ai-context-bar" id="aiContextBar">
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;">Контекст: <span id="aiContextTitle">—</span></span>
+          <button class="context-clear-btn" onclick="clearContext(event)" title="Сбросить контекст статьи">×</button>
+        </div>
+        <div class="ai-messages" id="aiMessages"></div>
+        <div class="ai-input-wrap">
+          <textarea class="ai-input" id="aiInput" rows="1" placeholder="Введите вопрос..."></textarea>
+          <button class="ai-send" id="aiSendBtn" onclick="sendMessage()">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Плавающая кнопка чата -->
+  <button class="ai-fab" id="aiFab" onclick="openGeneralChat()" title="Спросить ИИ-ассистента">
+    <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+    </svg>
+  </button>
 
 </div>
 
@@ -724,8 +1190,6 @@
 
   const TOPIC_KEYS = Object.keys(TOPIC_LABELS);
 
-  // Шаблоны заголовков/описаний по темам + список «подтем»-подстановок.
-  // Каждая тема даёт subjects.length новостей (комбинируется с несколькими шаблонами по кругу).
   const TOPIC_TEMPLATES = {
     politics: {
       templates: [
@@ -805,8 +1269,6 @@
       });
     });
 
-    // Часть новостей относится сразу к нескольким категориям —
-    // добавляем вторую тему каждой 4-й статье (например, технологии + бизнес).
     list.forEach((article, idx) => {
       if (idx % 4 === 3) {
         const primary = article.topics[0];
@@ -824,11 +1286,34 @@
   // ============================
   // STATE
   // ============================
-  let activeTopics = new Set(); // несколько категорий могут быть выбраны одновременно
+  let activeTopics = new Set();
   let searchQuery = '';
   let currentArticleId = null;
   let chatHistory = [];
   let isTyping = false;
+
+  // ============================
+  // MOBILE MENU
+  // ============================
+  function toggleMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const toggle = document.getElementById('menuToggle');
+    const isOpen = sidebar.classList.toggle('mobile-open');
+    overlay.classList.toggle('visible', isOpen);
+    toggle.classList.toggle('active', isOpen);
+    document.body.style.overflow = isOpen ? 'hidden' : '';
+  }
+
+  function closeMobileMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const toggle = document.getElementById('menuToggle');
+    sidebar.classList.remove('mobile-open');
+    overlay.classList.remove('visible');
+    toggle.classList.remove('active');
+    document.body.style.overflow = '';
+  }
 
   // ============================
   // RENDER
@@ -837,16 +1322,12 @@
     const grid = document.getElementById('newsGrid');
     const noResults = document.getElementById('noResults');
 
-    // Remove existing cards
     grid.querySelectorAll('.card').forEach(el => el.remove());
 
     const q = searchQuery.toLowerCase().trim();
-
     let anyVisible = false;
 
     ARTICLES.forEach(article => {
-      // Статья видна, если хотя бы одна из её тем входит в выбранные категории
-      // (или если категории вообще не выбраны — тогда фильтр по теме не действует).
       const matchesTopic = activeTopics.size === 0
         || article.topics.some(t => activeTopics.has(t));
       const matchesSearch = !q
@@ -855,8 +1336,6 @@
 
       const card = buildCard(article);
 
-      // Карточка остаётся видимой только если подходит и под выбранные категории, и под поиск.
-      // Иначе она полностью скрывается (не просто затемняется).
       if (matchesTopic && matchesSearch) {
         anyVisible = true;
       } else {
@@ -908,7 +1387,7 @@
   }
 
   // ============================
-  // TOPIC FILTER (множественный выбор категорий)
+  // TOPIC FILTER
   // ============================
   function updateResetVisibility() {
     document.getElementById('sidebarReset').classList.toggle('visible', activeTopics.size > 0);
@@ -917,23 +1396,24 @@
   function toggleTopic(el) {
     const topic = el.dataset.topic;
     if (activeTopics.has(topic)) {
-      // Повторное нажатие на уже активную категорию снимает только её
       activeTopics.delete(topic);
       el.classList.remove('active');
     } else {
-      // Категории не исключают друг друга — можно выбрать сразу несколько
       activeTopics.add(topic);
       el.classList.add('active');
     }
     updateResetVisibility();
     renderCards();
+    if (window.innerWidth <= 860) {
+      closeMobileMenu();
+    }
   }
 
   function clearTopic(event, el) {
     event.stopPropagation();
-    const topic = el.dataset.topic;
+    const topic = el.parentElement.dataset.topic;
     activeTopics.delete(topic);
-    el.classList.remove('active');
+    el.parentElement.classList.remove('active');
     updateResetVisibility();
     renderCards();
   }
@@ -943,6 +1423,9 @@
     document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
     updateResetVisibility();
     renderCards();
+    if (window.innerWidth <= 860) {
+      closeMobileMenu();
+    }
   }
 
   // ============================
@@ -968,29 +1451,118 @@
   // ============================
   // CHAT
   // ============================
+  function hasMessages() {
+    return document.getElementById('aiMessages').children.length > 0;
+  }
+
+  function showChatUI() {
+    document.getElementById('aiIdle').style.display = 'none';
+    document.getElementById('aiChat').classList.add('active');
+    document.getElementById('aiPanel').classList.add('expanded', 'mobile-open');
+    syncFabVisibility();
+
+    // Scroll to bottom after a short delay
+    setTimeout(() => {
+      const msgs = document.getElementById('aiMessages');
+      if (msgs) msgs.scrollTop = msgs.scrollHeight;
+    }, 100);
+  }
+
+  function appendSystemNotice(text) {
+    const msgs = document.getElementById('aiMessages');
+    const div = document.createElement('div');
+    div.className = 'msg-system';
+    div.textContent = text;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
   function askAgent(articleId) {
     const article = ARTICLES.find(a => a.id === articleId);
     if (!article) return;
 
+    const alreadyChatting = hasMessages();
+    const previousArticleId = currentArticleId;
     currentArticleId = articleId;
+
+    document.getElementById('aiContextBar').style.display = 'flex';
+    document.getElementById('aiContextTitle').textContent = article.title;
+
+    showChatUI();
+
+    if (!alreadyChatting) {
+      appendMessage('ai', `Я готов ответить на вопросы по статье «${article.title}». Что вас интересует?`);
+    } else if (previousArticleId !== articleId) {
+      appendSystemNotice(`Контекст обновлён: «${article.title}»`);
+    }
+
+    setTimeout(() => {
+      document.getElementById('aiInput').focus();
+    }, 300);
+  }
+
+  function openGeneralChat(prefillText) {
+    const alreadyChatting = hasMessages();
+    const hadContext = currentArticleId !== null;
+    currentArticleId = null;
+
+    document.getElementById('aiContextBar').style.display = 'none';
+
+    showChatUI();
+
+    if (!alreadyChatting) {
+      appendMessage('ai', 'Здравствуйте! Чем могу помочь? Можете задать общий вопрос или открыть «Спросить агента» на карточке конкретной новости, чтобы обсудить именно её.');
+    } else if (hadContext) {
+      appendSystemNotice('Контекст статьи сброшен — продолжаем общий диалог.');
+    }
+
+    if (prefillText) {
+      const input = document.getElementById('aiInput');
+      input.value = prefillText;
+      sendMessage();
+    } else {
+      setTimeout(() => {
+        document.getElementById('aiInput').focus();
+      }, 300);
+    }
+  }
+
+  function clearContext(event) {
+    if (event) event.stopPropagation();
+    if (currentArticleId === null) return;
+    currentArticleId = null;
+    document.getElementById('aiContextBar').style.display = 'none';
+    appendSystemNotice('Контекст статьи сброшен — продолжаем общий диалог.');
+  }
+
+  function confirmClearChat() {
+    if (!hasMessages()) return;
+
+    const confirmed = window.confirm('Очистить историю чата? Это действие нельзя отменить.');
+    if (!confirmed) return;
+
+    document.getElementById('aiMessages').innerHTML = '';
     chatHistory = [];
 
-    document.getElementById('aiContextTitle').textContent = article.title;
-    document.getElementById('aiMessages').innerHTML = '';
-    document.getElementById('aiIdle').style.display = 'none';
-    document.getElementById('aiChat').classList.add('active');
-    document.getElementById('aiPanel').classList.add('expanded');
-    document.getElementById('aiInput').focus();
-
-    appendMessage('ai', `Я готов ответить на вопросы по статье «${article.title}». Что вас интересует?`);
+    if (currentArticleId !== null) {
+      const article = ARTICLES.find(a => a.id === currentArticleId);
+      appendMessage('ai', `История очищена. Готов отвечать на вопросы по статье «${article ? article.title : ''}».`);
+    } else {
+      appendMessage('ai', 'Чем могу помочь?');
+    }
   }
 
   function closeChat() {
     document.getElementById('aiChat').classList.remove('active');
-    document.getElementById('aiPanel').classList.remove('expanded');
+    document.getElementById('aiPanel').classList.remove('expanded', 'mobile-open');
     document.getElementById('aiIdle').style.display = 'flex';
-    currentArticleId = null;
-    chatHistory = [];
+    syncFabVisibility();
+  }
+
+  function syncFabVisibility() {
+    const fab = document.getElementById('aiFab');
+    const isOpen = document.getElementById('aiPanel').classList.contains('mobile-open');
+    fab.style.display = isOpen ? 'none' : '';
   }
 
   function appendMessage(role, text) {
@@ -1033,7 +1605,6 @@
     showTyping();
 
     try {
-      // Если статья есть в контексте — добавим её в запрос
       const article = ARTICLES.find(a => a.id === currentArticleId);
       const context = article ? `[Статья: ${article.title}]\n${article.summary}\n\n` : '';
       const query = context + text;
@@ -1063,7 +1634,6 @@
     }
   }
 
-  // Enter to send (Shift+Enter for newline)
   document.getElementById('aiInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -1071,10 +1641,19 @@
     }
   });
 
-  // Auto-resize textarea
   document.getElementById('aiInput').addEventListener('input', function () {
     this.style.height = 'auto';
     this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+  });
+
+  // Handle viewport resize (keyboard open/close on mobile)
+  window.addEventListener('resize', () => {
+    const msgs = document.getElementById('aiMessages');
+    if (msgs && document.getElementById('aiChat').classList.contains('active')) {
+      setTimeout(() => {
+        msgs.scrollTop = msgs.scrollHeight;
+      }, 300);
+    }
   });
 
   // ============================
