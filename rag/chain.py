@@ -19,8 +19,9 @@ from graph.search import global_search, local_search
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:32b")
-POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://news:news@localhost:5432/newsdb")
+POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5432/mydb")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
 TOP_K = 50   # сколько берём из Qdrant до reranker'а
 TOP_N = 10   # сколько отдаём в контекст после reranker'а
@@ -112,9 +113,9 @@ async def _generate(context: str, query: str) -> str:
 
 
 class RAGChain:
-    def __init__(self, qdrant_url: str = QDRANT_URL):
+    def __init__(self, qdrant_url: str = QDRANT_URL, api_key: Optional[str] = QDRANT_API_KEY):
         # BGE-M3 и reranker загружаются один раз при создании цепочки
-        self._indexer = NewsIndexer(qdrant_url=qdrant_url)
+        self._indexer = NewsIndexer(qdrant_url=qdrant_url, api_key=api_key)
         self._reranker = Reranker()
 
     async def answer(self, query: str, top_k: int = TOP_K) -> str:

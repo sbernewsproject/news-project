@@ -3,8 +3,9 @@
 Используется для первичной или повторной индексации без перечанкования.
 
 Переменные окружения (или значения по умолчанию):
-  POSTGRES_DSN  — postgresql://news:news@localhost:5432/newsdb
+  POSTGRES_DSN  — postgresql://user:password@localhost:5432/mydb
   QDRANT_URL    — http://localhost:6333
+  QDRANT_API_KEY — (опционально)
   BATCH_SIZE    — 256
 """
 
@@ -18,8 +19,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from embeddings.embed_and_index import IndexableChunk, NewsIndexer
 
-POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://news:news@localhost:5432/newsdb")
+POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5432/mydb")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "256"))
 
 
@@ -29,7 +31,7 @@ async def main() -> None:
 
     conn = await asyncpg.connect(POSTGRES_DSN)
     try:
-        indexer = NewsIndexer(qdrant_url=QDRANT_URL)
+        indexer = NewsIndexer(qdrant_url=QDRANT_URL, api_key=QDRANT_API_KEY)
         total = 0
         offset = 0
 

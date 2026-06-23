@@ -19,7 +19,7 @@ if _frontend.exists():
     async def root():
         return FileResponse(str(_frontend / "index.html"))
 
-_chain = RAGChain(qdrant_url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+_chain = RAGChain(qdrant_url=os.getenv("QDRANT_URL", "http://localhost:6333"), api_key=os.getenv("QDRANT_API_KEY"))
 
 
 class QueryRequest(BaseModel):

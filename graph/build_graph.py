@@ -81,16 +81,16 @@ async def insert_articles(texts: list[str]) -> None:
 async def _build_from_postgres() -> None:
     import asyncpg
 
-    dsn = os.getenv("POSTGRES_DSN", "postgresql://news:news@localhost:5432/newsdb")
+    dsn = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5432/mydb")
     conn = await asyncpg.connect(dsn)
     try:
         rows = await conn.fetch(
-            "SELECT title, content FROM articles ORDER BY published_at DESC"
+            "SELECT title, arttext FROM article ORDER BY createdate DESC"
         )
     finally:
         await conn.close()
 
-    texts = [f"{r['title']}\n\n{r['content']}" for r in rows]
+    texts = [f"{r['title']}\n\n{r['arttext']}" for r in rows]
     print(f"Загружаем {len(texts)} статей в граф...")
     await insert_articles(texts)
     print("Готово.")

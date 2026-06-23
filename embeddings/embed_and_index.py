@@ -6,8 +6,11 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
-MODEL_NAME = "BAAI/bge-m3"
-RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
+import os
+MODEL_NAME = os.getenv("BGE_MODEL_PATH", "BAAI/bge-m3")
+RERANKER_MODEL = os.getenv("RERANKER_MODEL_PATH", "BAAI/bge-reranker-v2-m3")
+# MODEL_NAME = "BAAI/bge-m3"
+# RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 COLLECTION = "news_chunks"
 VECTOR_SIZE = 1024  # размерность dense-вектора BGE-M3
 BATCH_SIZE = 64
@@ -22,10 +25,13 @@ class IndexableChunk:
 
 
 class NewsIndexer:
-    def __init__(self, qdrant_url: Optional[str] = None):
+    def __init__(self, qdrant_url: Optional[str] = None, api_key: Optional[str] = None):
         # None → in-memory Qdrant для тестов без Docker
         self.model = SentenceTransformer(MODEL_NAME)
-        self.client = QdrantClient(url=qdrant_url) if qdrant_url else QdrantClient(":memory:")
+        if qdrant_url:
+            self.client = QdrantClient(url=qdrant_url, api_key=api_key)
+        else:
+            self.client = QdrantClient(":memory:")
         self._ensure_collection()
 
     def _ensure_collection(self) -> None:

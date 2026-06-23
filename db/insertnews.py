@@ -6,7 +6,7 @@ import asyncpg
 
 DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5432/mydb")
 
-ARTICLE_TYPE = "Новость"
+ARTICLE_TYPE = "Новость" # котость и сладость
 
 
 async def get_or_create(conn, table: str, id_col: str, name_col: str, name: str) -> int:

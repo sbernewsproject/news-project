@@ -12,6 +12,7 @@ from embeddings.embed_and_index import IndexableChunk, NewsIndexer
 
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5432/mydb")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
 
 async def insert_chunks(conn, chunks) -> list[int]:
@@ -33,12 +34,13 @@ async def insert_chunks(conn, chunks) -> list[int]:
 
 
 async def main() -> None:
-    indexer = NewsIndexer(qdrant_url=QDRANT_URL)
+    indexer = NewsIndexer(qdrant_url=QDRANT_URL, api_key=QDRANT_API_KEY)
 
     conn = await asyncpg.connect(POSTGRES_DSN)
     try:
         rows = await conn.fetch(
             "SELECT article_id, author, title, arttext, arturl, mark, parsedate, createdate, types_id FROM article"
+            " WHERE article_id NOT IN (SELECT DISTINCT article_id FROM chunk)"
         )
 
         for row in rows:
