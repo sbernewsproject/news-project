@@ -1,46 +1,65 @@
 # sravni.ru — Отзывы о банках
 
-Парсер отзывов с sravni.ru. Каждый отзыв сохраняется как отдельная запись в формате новостной статьи.
+Парсер отзывов с sravni.ru. Каждый отзыв сохраняется как отдельная запись.
 
-## Запуск
+## Как работает (важно — архитектура изменилась)
+
+Парсер использует прямой JSON API сайта (`/proxy-reviews/reviews`) вместо HTML-страниц.
+
+**Шаг `sitemap` делает всё за один проход:**
+1. Загружает список активных банков (~275 штук) с `/banki/otzyvy/` — 1 HTML-запрос
+2. Для каждого банка вызывает JSON API с `pageSize=1000` — получает все отзывы сразу
+3. Сохраняет готовые отзывы в `parsed_articles.json` и `parsing_progress.json`
+
+**Шаг `parse` — мгновенный no-op:** все URL уже в `processed_urls`, очередь пустая, парсер выходит сразу.
+
+Для sravni.ru достаточно запускать только `sitemap`.
+
+## Команды
 
 Все команды выполняются из корня репозитория.
 
-**Собрать URL отзывов (все активные банки):**
 ```bash
+# Полный сбор всех отзывов (все ~275 активных банков)
 python3 parser/parser/main.py parser/sravni.ru sitemap
-```
 
-**Собрать URL отзывов (тест — первые N банков):**
-```bash
+# Тест — первые 5 банков
 python3 parser/parser/main.py parser/sravni.ru sitemap --limit 5
-```
 
-**Спарсить отзывы (тест — первые N отзывов):**
-```bash
-python3 parser/parser/main.py parser/sravni.ru parse --limit 20
-```
-
-**Полный прогон:**
-```bash
-python3 parser/parser/main.py parser/sravni.ru all
-```
-
-**Начать заново (игнорировать кеш):**
-```bash
+# Начать заново (сбросить кеш)
 python3 parser/parser/main.py parser/sravni.ru sitemap --fresh
-python3 parser/parser/main.py parser/sravni.ru parse --fresh
+
+# all — то же что sitemap (parse завершится мгновенно)
+python3 parser/parser/main.py parser/sravni.ru all --limit 5
+
+# Запуск параллельно со старым (отдельные файлы)
+python3 parser/parser/main.py parser/sravni.ru sitemap --suffix _new
 ```
+
+**Флаги:**
+
+| Флаг | Применяется к | Что делает |
+|------|--------------|------------|
+| `--limit N` | `sitemap` | Обходит только первые N банков |
+| `--fresh` | `sitemap` | Игнорирует кеш, пересобирает |
+| `--suffix X` | `sitemap`, `parse` | Добавляет `X` к именам файлов (`parsed_articles_X.json`) |
+
+> `--limit` на шаге `parse` не имеет смысла — parse всегда видит пустую очередь.
 
 ## Источники данных
 
-| Шаг | URL | Что берём |
-|-----|-----|-----------|
-| Список банков | `/banki/otzyvy/` | slug'и активных банков (~275 штук) из `__NEXT_DATA__` |
-| Листинг отзывов | `/bank/{slug}/otzyvy/?orderBy=byDate&page={N}` | ID отзывов из `__NEXT_DATA__` (все страницы) |
-| Полный отзыв | `/bank/{slug}/otzyvy/{id}/` | все поля отзыва из `__NEXT_DATA__` |
+| Шаг | Метод | URL |
+|-----|-------|-----|
+| Список банков | HTML + `__NEXT_DATA__` | `https://www.sravni.ru/banki/otzyvy/` |
+| Отзывы банка | **JSON API** | `https://www.sravni.ru/proxy-reviews/reviews` |
 
-Сайт построен на Next.js — данные берутся из встроенного в HTML блока `__NEXT_DATA__` (SSR), без обращения к отдельному API.
+**Параметры API:**
+- `reviewObjectId={id}` — MongoDB ObjectId банка из `organizationsList.id`
+- `reviewObjectType=bank` — только банковские отзывы
+- `pageSize=1000` — максимально возможный размер страницы
+- `orderBy=byDate` — хронологический порядок
+
+> `organizationAlias` в этом API игнорируется — фильтрация только по `reviewObjectId`.
 
 ## Формат результата
 
@@ -62,7 +81,7 @@ python3 parser/parser/main.py parser/sravni.ru parse --fresh
   "review_tag": "creditCards",
   "product_name": "СберКарта",
   "problem_solved": false,
-  "parsed_at": "2026-06-22T12:00:00"
+  "parsed_at": "2026-06-23T10:00:00"
 }
 ```
 
@@ -72,8 +91,8 @@ python3 parser/parser/main.py parser/sravni.ru parse --fresh
 |------|-----|----------|
 | `url` | str | Прямая ссылка на отзыв |
 | `title` | str | Заголовок отзыва |
-| `author` | str | Имя автора (или `"Анонимный Пользователь"`) |
-| `date_published` | str | Дата публикации в ISO 8601 |
+| `author` | str | Имя автора (`"Пользователь"` для анонимных) |
+| `date_published` | str | Дата публикации ISO 8601 |
 | `section` | str | Всегда `"bank_review"` |
 | `bank_name` | str | Название банка |
 | `bank_slug` | str | Slug банка (из URL) |
@@ -97,11 +116,11 @@ python3 parser/parser/main.py parser/sravni.ru parse --fresh
 | `remoteService` | Дистанционное обслуживание |
 | `creditRefinancing` | Рефинансирование |
 | `mortgage` | Ипотека |
+| `moneyOrder` | Денежные переводы |
 
 ## Известные особенности
 
-- `--limit` на шаге `sitemap` ограничивает количество банков, а не отзывов.
-- `--limit` на шаге `parse` ограничивает количество отзывов.
-- Банки без отзывов пропускаются автоматически на шаге `sitemap`.
-- Обход идёт по сортировке `byDate`, чтобы не пропускать отзывы (сортировка по популярности может возвращать 0 элементов на последней неполной странице).
-- `score` — целое число от 1 до 5.
+- `--limit N` на `sitemap` ограничивает количество **банков**, не отзывов.
+- Банки без отзывов в API дают `+0` и пропускаются.
+- Прогресс внутри обхода одного банка не сохраняется — если прервать, нужен `--fresh`.
+- `score` — число 1–5 или пустая строка если оценки нет.

@@ -11,6 +11,7 @@ graph-ragu==0.0.3
 
 # --- database ---
 asyncpg>=0.29
+ijson>=3.3
 
 # --- API ---
 fastapi>=0.111
