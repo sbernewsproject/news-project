@@ -1,7 +1,5 @@
-.venv_parser
-komsomolskaya_pravda/*.json
-komsomolskaya_pravda/*.txt
-lenta.ru/*.json
-lenta.ru/*.txt
-banki.ru/*.json
-banki.ru/*.txt
+.venv_parser/
+
+# всё json и txt в подпапках — игнорируем (данные слишком большие для GitHub)
+*/*.json
+*/*.txt

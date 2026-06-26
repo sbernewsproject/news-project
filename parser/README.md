@@ -11,7 +11,8 @@
 |-------|-----------|----------------|
 | `komsomolskaya_pravda/` | Новостные статьи | XML sitemap |
 | `lenta.ru/` | Новостные статьи | XML sitemap |
-| `banki.ru/` | Карточки банков + отзывы | HTML-страница со списком |
+| `banki.ru/` | Отзывы о банках | AJAX JSON API (`/services/responses/list/ajax/`) |
+| `sravni.ru/` | Отзывы о банках | Прямой JSON API (`/proxy-reviews/reviews`) |
 
 ## Структура
 
@@ -36,6 +37,11 @@ banki.ru/                   настройки для banki.ru
   config.py
   parsers.py                парсинг карточек банков и отзывов
   README.md                 подробная документация
+
+sravni.ru/                  настройки для sravni.ru
+  config.py
+  parsers.py                парсинг отзывов через __NEXT_DATA__
+  README.md                 подробная документация
 ```
 
 ## Установка
@@ -43,8 +49,11 @@ banki.ru/                   настройки для banki.ru
 ```bash
 python3 -m venv .venv_parser
 source .venv_parser/bin/activate
-pip3 install requests beautifulsoup4 lxml
+pip3 install requests beautifulsoup4 lxml cloudscraper aiohttp certifi
 ```
+
+> `cloudscraper` нужен только для banki.ru (обход WAF-блокировок).
+> `aiohttp` + `certifi` — для async-парсинга новостных сайтов (КП, Lenta).
 
 ## Запуск
 
@@ -61,11 +70,12 @@ python3 parser/parser/main.py <папка> <команда> [--limit N] [--fresh
 | `all`     | оба шага подряд                    |
 
 **Флаг `--limit N`** ограничивает количество:
-- для `sitemap` — N sub-sitemap'ов
-- для `parse` — N статей/банков
+- для `sitemap` — N sub-sitemap'ов (для banki.ru/sravni.ru — N банков)
+- для `parse` — N статей
 
 **Флаг `--fresh`** игнорирует сохранённый прогресс и начинает сначала.
-Удобно при повторном тестировании тех же URL.
+
+**Флаг `--suffix X`** добавляет `X` к именам файлов (`parsed_articles_X.json`). Удобно для изолированных прогонов.
 
 ## Команды по сайтам
 
@@ -94,25 +104,47 @@ python3 parser/parser/main.py parser/lenta.ru all
 ```
 Подробнее: [lenta.ru/README.md](lenta.ru/README.md)
 
-### Banki.ru — Банки
+### Banki.ru — Отзывы о банках
+
+> **Шаг `sitemap` делает всё** — через AJAX JSON API получает все отзывы по всем банкам.
+> Шаг `parse` мгновенно завершается с `nothing to parse`.
+>
+> **Блокировки:** banki.ru банит IP при слишком частых запросах. Парсер использует
+> `cloudscraper`, паузы 3–6с, заголовок `X-Requested-With: XMLHttpRequest`.
+> Не запускай тестовые скрипты параллельно.
 
 ```bash
-# собрать список банков (~360 штук)
+# тест — первые 5 банков
+python3 parser/parser/main.py parser/banki.ru sitemap --limit 5
+
+# полный прогон (все ~359 банков)
 python3 parser/parser/main.py parser/banki.ru sitemap
 
-# тест — 5 банков
-python3 parser/parser/main.py parser/banki.ru parse --limit 5
-
-# повторить те же 5 банков
-python3 parser/parser/main.py parser/banki.ru parse --limit 5 --fresh
-
-# полный прогон (оба шага подряд)
-python3 parser/parser/main.py parser/banki.ru all
+# сбросить кеш и пересобрать
+python3 parser/parser/main.py parser/banki.ru sitemap --fresh
 ```
 
 Подробнее: [banki.ru/README.md](banki.ru/README.md)
 
-Прогресс сохраняется после каждой записи — можно прервать и продолжить.
+### Sravni.ru — Отзывы о банках
+
+> **Шаг `sitemap` делает всё** — собирает список банков и сразу получает все отзывы через
+> прямой JSON API. Шаг `parse` мгновенно завершается с `nothing to parse`.
+
+```bash
+# тест — первые 5 банков
+python3 parser/parser/main.py parser/sravni.ru sitemap --limit 5
+
+# полный прогон (все ~275 активных банков)
+python3 parser/parser/main.py parser/sravni.ru sitemap
+
+# сбросить кеш и пересобрать
+python3 parser/parser/main.py parser/sravni.ru sitemap --fresh
+```
+
+Подробнее: [sravni.ru/README.md](sravni.ru/README.md)
+
+Прогресс сохраняется после каждого банка — можно прервать и продолжить. Запуск без `--fresh` дополняет уже собранные данные.
 
 ## Формат результата
 
@@ -136,7 +168,31 @@ python3 parser/parser/main.py parser/banki.ru all
 
 ### Banki.ru
 
-`parsed_articles.json` — список объектов, по одному на банк. Каждый содержит карточку банка и массив `reviews` с превью отзывов. Подробнее в [banki.ru/README.md](banki.ru/README.md).
+`parsed_articles.json` — список объектов, по одному на отзыв (аналогично sravni.ru). Подробнее в [banki.ru/README.md](banki.ru/README.md).
+
+### Sravni.ru
+
+`parsed_articles.json` — список объектов, по одному на отзыв:
+
+```json
+{
+  "url": "https://www.sravni.ru/bank/sberbank-rossii/otzyvy/1126129/",
+  "title": "Мошенничество сбербанка с кредитными картами",
+  "author": "Дарья Арутюнова",
+  "date_published": "2026-05-10T08:22:13.577071Z",
+  "section": "bank_review",
+  "bank_name": "Сбербанк",
+  "bank_slug": "sberbank-rossii",
+  "body": "Здравствуйте, имею негативный опыт...",
+  "body_length": 969,
+  "score": 1,
+  "city": "Армавир",
+  "review_tag": "creditCards",
+  "product_name": "СберКарта",
+  "problem_solved": false,
+  "parsed_at": "2026-06-22T12:00:00"
+}
+```
 
 ## Добавить новый сайт
 

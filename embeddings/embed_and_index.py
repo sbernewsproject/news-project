@@ -6,8 +6,11 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
-MODEL_NAME = "BAAI/bge-m3"
-RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
+import os
+MODEL_NAME = os.getenv("BGE_MODEL_PATH", "BAAI/bge-m3")
+RERANKER_MODEL = os.getenv("RERANKER_MODEL_PATH", "BAAI/bge-reranker-v2-m3")
+# MODEL_NAME = "BAAI/bge-m3"
+# RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 COLLECTION = "news_chunks"
 VECTOR_SIZE = 1024  # размерность dense-вектора BGE-M3
 BATCH_SIZE = 64
@@ -15,20 +18,20 @@ BATCH_SIZE = 64
 
 @dataclass
 class IndexableChunk:
-    chunk_id: int       # BIGSERIAL из Postgres
+    chunk_id: int
+    chunk_text: str
+    payload: dict
     article_id: int
-    text: str           # обогащённый текст: префикс (заголовок/источник/дата) + кусок
-    source: str
-    published_at: str   # дата в формате ISO-8601 (уточнить у Алены в каком в итоге формате дата)
-    language: str    # канон, убрать это поле и добавить недостающие. Узнать какие поля в бд
-    # entities: list[dict] = field(default_factory=list)
 
 
 class NewsIndexer:
-    def __init__(self, qdrant_url: Optional[str] = None):
+    def __init__(self, qdrant_url: Optional[str] = None, api_key: Optional[str] = None):
         # None → in-memory Qdrant для тестов без Docker
         self.model = SentenceTransformer(MODEL_NAME)
-        self.client = QdrantClient(url=qdrant_url) if qdrant_url else QdrantClient(":memory:")
+        if qdrant_url:
+            self.client = QdrantClient(url=qdrant_url, api_key=api_key)
+        else:
+            self.client = QdrantClient(":memory:")
         self._ensure_collection()
 
     def _ensure_collection(self) -> None:
@@ -45,19 +48,12 @@ class NewsIndexer:
         # обсуждали это с Сергеем на случай редактируемой статьи и способ перезаписи чанка
         for start in range(0, len(chunks), BATCH_SIZE):
             batch = chunks[start : start + BATCH_SIZE]
-            vectors = self._embed_passages([c.text for c in batch])
+            vectors = self._embed_passages([c.chunk_text for c in batch])
             points = [
                 PointStruct(
                     id=c.chunk_id,
                     vector=v,
-                    payload={ # поля еще будут изменены нужно узнать у Сергея и Кирилла какие метаданные передаем
-                        "chunk_id": c.chunk_id,
-                        "article_id": c.article_id,
-                        "source": c.source,
-                        "published_at": c.published_at,
-                        "language": c.language,
-                        # "entities": c.entities,
-                    },
+                    payload=c.payload
                 )
                 for c, v in zip(batch, vectors)
             ]
@@ -67,12 +63,12 @@ class NewsIndexer:
         # возвращает (chunk_id, score) в порядке убывания релевантности
         # не тянем текст чанков, тексты отдельно в Postgres
         vector = self._embed_query(query)
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=COLLECTION,
-            query_vector=vector,
+            query=vector,
             limit=top_k,
         )
-        return [(int(r.payload["chunk_id"]), r.score) for r in results]
+        return [(r.id, r.score) for r in results.points]
 
     def _embed_passages(self, texts: list[str]) -> list[list[float]]:
         prefixed = [f"passage: {t}" for t in texts]

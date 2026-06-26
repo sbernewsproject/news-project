@@ -1,33 +1,64 @@
 # Lenta.ru
 
+## Как работает
+
+Стандартный двухшаговый парсер: сначала собирает ссылки через XML sitemap (gzip), потом парсит каждую статью.
+
+| Шаг | Что делает |
+|-----|-----------|
+| `sitemap` | Обходит `lenta.ru/sitemap.xml.gz` и извлекает ссылки на `/news/` и `/articles/` |
+| `parse` | Загружает страницу каждой статьи и извлекает данные из кастомного парсера `parser.py` |
+
+Скорость парсинга: **~50 статей/сек** (100 async-соединений, без задержки).
+
 ## Запуск
 
-**Собрать ссылки (тест — 2 sitemap'а):**
+Все команды выполняются из корня репозитория.
+
+**Тест — 2 sitemap'а:**
 ```bash
-python3 parser/main.py lenta.ru sitemap --limit 2
+python3 parser/parser/main.py parser/lenta.ru sitemap --limit 2
 ```
 
-**Собрать ссылки (все):**
+**Полный сбор ссылок:**
 ```bash
-python3 parser/main.py lenta.ru sitemap
+python3 parser/parser/main.py parser/lenta.ru sitemap
 ```
 
-**Спарсить статьи (тест — 5 штук):**
+**Тест парсинга — 5 статей:**
 ```bash
-python3 parser/main.py lenta.ru parse --limit 5
+python3 parser/parser/main.py parser/lenta.ru parse --limit 5
 ```
 
-**Спарсить статьи (тест, повторно те же):**
+**Повторить те же 5 (игнорировать прогресс):**
 ```bash
-python3 parser/main.py lenta.ru parse --limit 5 --fresh
+python3 parser/parser/main.py parser/lenta.ru parse --limit 5 --fresh
 ```
 
-**Спарсить статьи (все):**
+**Полный парсинг:**
 ```bash
-python3 parser/main.py lenta.ru parse
+python3 parser/parser/main.py parser/lenta.ru parse
 ```
 
-**Оба шага подряд (все):**
+**Оба шага подряд:**
 ```bash
-python3 parser/main.py lenta.ru all
+python3 parser/parser/main.py parser/lenta.ru all
+```
+
+## Формат результата
+
+`parsed_articles.json` — список объектов:
+
+```json
+{
+  "url": "https://lenta.ru/news/2024/01/15/headline/",
+  "title": "Заголовок статьи",
+  "description": "Краткое описание",
+  "author": "Имя автора",
+  "date_published": "2024-01-15T12:00:00",
+  "section": "Россия",
+  "body": "Полный текст статьи...",
+  "body_length": 2800,
+  "parsed_at": "2024-01-16T10:30:00"
+}
 ```

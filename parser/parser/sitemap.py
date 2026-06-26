@@ -17,23 +17,23 @@ HEADERS = {
 DELAY = 0.5
 
 
-def _load_progress(data_dir: str) -> dict:
-    path = os.path.join(data_dir, "sitemap_progress.json")
+def _load_progress(data_dir: str, suffix: str = "") -> dict:
+    path = os.path.join(data_dir, f"sitemap_progress{suffix}.json")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     return {"processed_sitemaps": [], "all_links": []}
 
 
-def _save_progress(data_dir: str, processed: list, links: list) -> None:
-    path = os.path.join(data_dir, "sitemap_progress.json")
+def _save_progress(data_dir: str, processed: list, links: list, suffix: str = "") -> None:
+    path = os.path.join(data_dir, f"sitemap_progress{suffix}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"processed_sitemaps": processed, "all_links": links},
                   f, ensure_ascii=False, indent=2)
 
 
-def _save_links(data_dir: str, links: list) -> None:
-    path = os.path.join(data_dir, "all_article_links.txt")
+def _save_links(data_dir: str, links: list, suffix: str = "") -> None:
+    path = os.path.join(data_dir, f"all_article_links{suffix}.txt")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(links))
 
@@ -58,7 +58,7 @@ def _extract_locs(root: ET.Element) -> list[str]:
     return [el.text for el in root.findall(".//sm:loc", ns) if el.text]
 
 
-def collect_links(site_cfg: dict, data_dir: str, limit: int = 0, fresh: bool = False) -> list[str]:
+def collect_links(site_cfg: dict, data_dir: str, limit: int = 0, fresh: bool = False, suffix: str = "") -> list[str]:
     """
     Собирает ссылки на статьи через sitemap.
 
@@ -73,7 +73,7 @@ def collect_links(site_cfg: dict, data_dir: str, limit: int = 0, fresh: bool = F
         print(f"sitemap: {site_cfg['name']}")
         print("fresh: ignoring saved progress")
     else:
-        progress  = _load_progress(data_dir)
+        progress  = _load_progress(data_dir, suffix)
         processed = progress.get("processed_sitemaps", progress.get("processed_urls", []))
         all_links = progress.get("all_links", [])
         print(f"sitemap: {site_cfg['name']}")
@@ -107,7 +107,7 @@ def collect_links(site_cfg: dict, data_dir: str, limit: int = 0, fresh: bool = F
 
         if root is None:
             processed.append(sitemap_url)
-            _save_progress(data_dir, processed, all_links)
+            _save_progress(data_dir, processed, all_links, suffix)
             continue
 
         locs     = _extract_locs(root)
@@ -118,12 +118,12 @@ def collect_links(site_cfg: dict, data_dir: str, limit: int = 0, fresh: bool = F
             seen_set.add(u)
 
         processed.append(sitemap_url)
-        _save_progress(data_dir, processed, all_links)
-        _save_links(data_dir, all_links)
+        _save_progress(data_dir, processed, all_links, suffix)
+        _save_links(data_dir, all_links, suffix)
 
         print(f"  +{len(new_urls)} new, total: {len(all_links)}")
 
         time.sleep(DELAY)
 
-    print(f"done: {len(all_links)} links -> {os.path.join(data_dir, 'all_article_links.txt')}")
+    print(f"done: {len(all_links)} links -> {os.path.join(data_dir, f'all_article_links{suffix}.txt')}")
     return all_links

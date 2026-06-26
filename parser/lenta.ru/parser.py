@@ -369,6 +369,25 @@ def fetch_article(url: str, pause: float = 0.7) -> dict:
     }
 
 
+def parse_html(url: str, html: str) -> dict:
+    """Parse article from pre-downloaded HTML string (no HTTP — for async pipeline)."""
+    og   = _extract_og(html)
+    ld   = _extract_jsonld(html)
+    p    = _ArticleParser()
+    p.feed(html)
+    body = "\n\n".join(p.text_parts).strip() or None
+    return {
+        "url":          url,
+        "title":        p.title        or og.get("og:title", ""),
+        "published_at": ld.get("published_at", ""),
+        "author":       p.author       or ld.get("author", ""),
+        "description":  og.get("og:description", ""),
+        "image_url":    p.image_url    or og.get("og:image", ""),
+        "category":     og.get("category", ""),
+        "body":         body,
+    }
+
+
 # ──────────────────────────────────────────────────────────
 # ШАГ 3 — Pipeline: источник → полный текст → JSON
 # ──────────────────────────────────────────────────────────
