@@ -1,0 +1,39 @@
+# Compose для GPU-хоста: RAG-сервис с моделями.
+# Запуск: docker compose -f docker-compose.gpu.yml up -d --build
+#
+# Postgres и Qdrant живут на VPS — укажи их адреса в .env (POSTGRES_DSN, QDRANT_URL).
+# Ollama обычно крутится на самом GPU-хосте (host.docker.internal или IP хоста).
+services:
+  rag:
+    build:
+      context: .
+      dockerfile: Dockerfile.rag
+    container_name: news-rag
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      # Указывают на VPS:
+      POSTGRES_DSN: ${POSTGRES_DSN:-postgresql://user:password@VPS_IP:5432/mydb}
+      QDRANT_URL: ${QDRANT_URL:-http://VPS_IP:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-password}
+      # Локальный Ollama на GPU-хосте:
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:32b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-bge-m3}
+      GRAPH_WORKING_DIR: /app/ragu_working_dir
+    volumes:
+      # Кэш скачанных моделей HuggingFace, чтобы не качать при каждом старте.
+      - hf-cache:/root/.cache/huggingface
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  hf-cache:

@@ -1,0 +1,20 @@
+# Лёгкий образ API для VPS: лента из Postgres + гибридный поиск.
+# RAG (/query) проксируется на GPU-хост через RAG_URL — torch здесь не нужен.
+FROM python:3.12-slim
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+COPY requirements-api.txt .
+RUN pip install --no-cache-dir -r requirements-api.txt
+
+# Только то, что нужно лёгкому API (без rag/, graph/, embeddings-моделей).
+COPY api/ ./api/
+COPY embeddings/__init__.py ./embeddings/__init__.py
+COPY embeddings/remote.py ./embeddings/remote.py
+COPY frontend/ ./frontend/
+
+EXPOSE 8000
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,19 @@
+# Не тащить тяжёлое и лишнее в образы (особенно дамп 1.8 ГБ).
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+logs/
+dumps/
+ragu_working_dir/
+
+# Данные парсеров (большие JSON/тексты), сами парсеры не нужны в API/RAG образах.
+parser/*/parsed_articles.json
+parser/*/*.txt
+parser/*/*_progress.json
+
+# Локальное окружение и заметки
+.env
+*.md
+!README.md

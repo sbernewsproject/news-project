@@ -1068,30 +1068,7 @@
 
     <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-item" data-topic="politics" onclick="toggleTopic(this)">
-        <span>Политика</span>
-        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-      </div>
-      <div class="sidebar-item" data-topic="business" onclick="toggleTopic(this)">
-        <span>Бизнес</span>
-        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-      </div>
-      <div class="sidebar-item" data-topic="tech" onclick="toggleTopic(this)">
-        <span>Технологии</span>
-        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-      </div>
-      <div class="sidebar-item" data-topic="science" onclick="toggleTopic(this)">
-        <span>Наука</span>
-        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-      </div>
-      <div class="sidebar-item" data-topic="health" onclick="toggleTopic(this)">
-        <span>Здоровье</span>
-        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-      </div>
-      <div class="sidebar-item" data-topic="sports" onclick="toggleTopic(this)">
-        <span>Спорт</span>
-        <span class="topic-x" onclick="clearTopic(event, this.parentElement)">×</span>
-      </div>
+      <!-- Темы подгружаются из /api/themes функцией loadThemes() -->
       <div class="sidebar-reset" id="sidebarReset" onclick="resetTopics()">Сбросить фильтры</div>
     </aside>
 
@@ -1177,117 +1154,65 @@
 
 <script>
   // ============================
-  // MOCK DATA
+  // API HELPERS
   // ============================
-  const TOPIC_LABELS = {
-    politics: 'Политика',
-    business: 'Бизнес',
-    tech: 'Технологии',
-    science: 'Наука',
-    health: 'Здоровье',
-    sports: 'Спорт',
-  };
-
-  const TOPIC_KEYS = Object.keys(TOPIC_LABELS);
-
-  const TOPIC_TEMPLATES = {
-    politics: {
-      templates: [
-        s => ({ title: `Госдума приняла закон о ${s}`, summary: `Депутаты одобрили в окончательном чтении закон, регулирующий ${s} на федеральном уровне.` }),
-        s => ({ title: `Президент подписал указ о ${s}`, summary: `Глава государства утвердил документ, касающийся ${s} и определяющий порядок его применения.` }),
-        s => ({ title: `Правительство утвердило новые меры по ${s}`, summary: `Кабинет министров представил план мероприятий, направленных на совершенствование ${s} в ближайшие годы.` }),
-        s => ({ title: `Совет Федерации одобрил инициативу по ${s}`, summary: `Сенаторы поддержали законопроект, затрагивающий ${s} и предусматривающий переходный период для регионов.` }),
-      ],
-      subjects: ['цифровым платежам','избирательной системе','государственным закупкам','местному самоуправлению','государственной службе','охране окружающей среды','национальной безопасности','региональному бюджету','административной реформе','культурной политике','образовательным стандартам','миграционному учёту','градостроительству','общественному транспорту','пенсионной системе','земельному законодательству','антикоррупционной политике'],
-    },
-    business: {
-      templates: [
-        s => ({ title: `Крупная компания объявила о росте показателей по ${s}`, summary: `Бизнес сообщил об увеличении выручки, связывая успех с изменениями в сфере ${s}.` }),
-        s => ({ title: `ЦБ прокомментировал ситуацию с ${s}`, summary: `Банк России оценил текущие тенденции, касающиеся ${s}, и обозначил возможные риски для рынка.` }),
-        s => ({ title: `Эксперты спрогнозировали изменения на рынке ${s}`, summary: `Аналитики ожидают перестройку рынка под влиянием новых факторов, связанных с ${s}.` }),
-        s => ({ title: `Минфин представил отчёт по ${s}`, summary: `Ведомство опубликовало данные, отражающие динамику ${s} за последний отчётный период.` }),
-      ],
-      subjects: ['нефтяных котировок','валютного курса','розничной торговли','банковского сектора','фондового рынка','внешней торговли','инфляции','ключевой ставки','инвестиционного климата','рынка недвижимости','логистических цепочек','малого бизнеса','госкорпораций','страхового рынка','рынка труда','промышленного производства','венчурных инвестиций'],
-    },
-    tech: {
-      templates: [
-        s => ({ title: `Компания представила новое решение в области ${s}`, summary: `Разработчики продемонстрировали продукт, использующий ${s} для повышения эффективности.` }),
-        s => ({ title: `Найдена уязвимость в системах ${s}`, summary: `Специалисты по безопасности сообщили о проблеме, затрагивающей ${s}, и выпустили рекомендации по защите.` }),
-        s => ({ title: `Запущен пилотный проект на основе ${s}`, summary: `В нескольких регионах начали тестировать технологию ${s} в рамках пилотной программы.` }),
-        s => ({ title: `Аналитики оценили перспективы рынка ${s}`, summary: `Согласно новому исследованию, рынок ${s} продолжит активный рост в ближайшие годы.` }),
-      ],
-      subjects: ['искусственного интеллекта','беспилотного транспорта','облачных вычислений','кибербезопасности','квантовых вычислений','мобильных приложений','робототехники','больших данных','дронов','спутниковой связи','виртуальной реальности','блокчейн-технологий','умных устройств','биометрии','5G-сетей','нейросетей','автоматизации производства'],
-    },
-    science: {
-      templates: [
-        s => ({ title: `Учёные совершили открытие в области ${s}`, summary: `Исследовательская группа опубликовала результаты работы, связанной с ${s}, в научном журнале.` }),
-        s => ({ title: `Найдены новые данные о ${s}`, summary: `Команда исследователей представила находку, которая может изменить представления о ${s}.` }),
-        s => ({ title: `Эксперимент подтвердил гипотезу о ${s}`, summary: `Результаты лабораторных испытаний подтвердили ранее выдвинутую теорию о ${s}.` }),
-        s => ({ title: `Запущен новый проект по изучению ${s}`, summary: `Институт объявил о старте долгосрочной программы исследований в области ${s}.` }),
-      ],
-      subjects: ['сверхпроводимости','чёрных дыр','древних поселений','генетики человека','климатических изменений','микробиома','тёмной материи','вулканической активности','океанических течений','палеонтологии','нейронаук','экзопланет','квантовой физики','биоразнообразия','полярных льдов','материаловедения','археологии'],
-    },
-    health: {
-      templates: [
-        s => ({ title: `Минздрав обновил рекомендации по ${s}`, summary: `Ведомство пересмотрело подходы к ${s} на основе новых клинических данных.` }),
-        s => ({ title: `Учёные разработали новый метод лечения ${s}`, summary: `Клинические испытания показали эффективность нового подхода к терапии ${s}.` }),
-        s => ({ title: `ВОЗ выступила с заявлением о ${s}`, summary: `Международная организация прокомментировала ситуацию с ${s} и дала рекомендации странам.` }),
-        s => ({ title: `Запущена программа профилактики ${s}`, summary: `Региональные клиники начали внедрять новую программу, направленную на раннее выявление ${s}.` }),
-      ],
-      subjects: ['сезонного гриппа','сердечно-сосудистых заболеваний','диабета','туберкулёза','психического здоровья','детского ожирения','онкологических заболеваний','вакцинации','антибиотикорезистентности','репродуктивного здоровья','зрения','аллергии','нарушений сна','заболеваний опорно-двигательного аппарата','инфекционных заболеваний','питания пожилых людей','реабилитации после травм'],
-    },
-    sports: {
-      templates: [
-        s => ({ title: `Сборная одержала победу на турнире по ${s}`, summary: `Команда показала уверенную игру и завоевала медали на международных соревнованиях по ${s}.` }),
-        s => ({ title: `Объявлен состав команды на чемпионат по ${s}`, summary: `Тренерский штаб определил список спортсменов, которые примут участие в первенстве по ${s}.` }),
-        s => ({ title: `Спортсмен установил новый рекорд в ${s}`, summary: `Достижение стало главным событием сезона в дисциплине ${s} и попало в книгу рекордов федерации.` }),
-        s => ({ title: `В городе пройдёт крупный турнир по ${s}`, summary: `Организаторы анонсировали проведение масштабных соревнований по ${s} с участием зарубежных команд.` }),
-      ],
-      subjects: ['хоккею','футболу','теннису','лёгкой атлетике','плаванию','фигурному катанию','боксу','баскетболу','волейболу','биатлону','гимнастике','борьбе','шахматам','велоспорту','лыжным гонкам','регби','гребле'],
-    },
-  };
-
-  const SOURCE_NAMES = ['РИА Новости','Интерфакс','ТАСС','РБК','Коммерсантъ','Известия','Лента.ру','Forbes','Хабр','VC.ru','N+1','Наука и жизнь','Медвестник','Спорт-Экспресс','Чемпионат','Российская газета','Финмаркет','Роскосмос'];
-
-  function generateArticles() {
-    const list = [];
-    let id = 1;
-
-    TOPIC_KEYS.forEach(topic => {
-      const { templates, subjects } = TOPIC_TEMPLATES[topic];
-      subjects.forEach((subject, i) => {
-        const { title, summary } = templates[i % templates.length](subject);
-        list.push({
-          id: id,
-          topics: [topic],
-          title,
-          summary,
-          source: `https://example.com/article/${id}`,
-          sourceName: SOURCE_NAMES[id % SOURCE_NAMES.length],
-        });
-        id++;
-      });
-    });
-
-    list.forEach((article, idx) => {
-      if (idx % 4 === 3) {
-        const primary = article.topics[0];
-        const otherTopics = TOPIC_KEYS.filter(t => t !== primary);
-        const secondary = otherTopics[idx % otherTopics.length];
-        article.topics.push(secondary);
-      }
-    });
-
-    return list;
+  function esc(s) {
+    return String(s ?? '')
+      .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
   }
 
-  const ARTICLES = generateArticles();
+  async function fetchJSON(url) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+  }
+
+  // GET /api/articles с учётом активных тем, строки поиска и курсора пагинации.
+  async function apiArticles(cursor) {
+    const p = new URLSearchParams();
+    p.set('limit', '20');
+    if (cursor) p.set('cursor', cursor);
+    const q = searchQuery.trim();
+    if (q) {
+      p.set('q', q);                 // режим поиска: фильтр тем на бэкенде не применяется
+    } else {
+      activeThemes.forEach(id => p.append('theme', id));
+    }
+    return fetchJSON(`/api/articles?${p.toString()}`);
+  }
+
+  async function loadArticleDetail(id) {
+    return fetchJSON(`/api/articles/${id}`);
+  }
+
+  // Сайдбар тем строится из реальных разделов БД (GET /api/themes).
+  async function loadThemes() {
+    const sidebar = document.getElementById('sidebar');
+    const resetBtn = document.getElementById('sidebarReset');
+    let themes = [];
+    try { themes = await fetchJSON('/api/themes'); } catch { themes = []; }
+    sidebar.querySelectorAll('.sidebar-item').forEach(el => el.remove());
+    themes.forEach(t => {
+      const item = document.createElement('div');
+      item.className = 'sidebar-item';
+      item.dataset.topic = t.id;
+      item.addEventListener('click', () => toggleTopic(item));
+      item.innerHTML = `<span>${esc(t.name)}</span>` +
+        `<span class="topic-x" title="Убрать фильтр">×</span>`;
+      item.querySelector('.topic-x').addEventListener('click', (e) => clearTopic(e, item));
+      sidebar.insertBefore(item, resetBtn);
+    });
+  }
 
   // ============================
   // STATE
   // ============================
-  let activeTopics = new Set();
+  let activeThemes = new Set();   // активные theme_id
   let searchQuery = '';
+  let nextCursor = null;          // курсор пагинации (article_id) или null
+  let isLoading = false;
+  const articlesById = {};        // id → карточка (для контекста чата)
   let currentArticleId = null;
   let chatHistory = [];
   let isTyping = false;
@@ -1318,34 +1243,32 @@
   // ============================
   // RENDER
   // ============================
-  function renderCards() {
+  async function renderCards(reset = false) {
+    if (isLoading) return;
     const grid = document.getElementById('newsGrid');
     const noResults = document.getElementById('noResults');
 
-    grid.querySelectorAll('.card').forEach(el => el.remove());
+    if (reset) {
+      nextCursor = null;
+      grid.querySelectorAll('.card').forEach(el => el.remove());
+    }
 
-    const q = searchQuery.toLowerCase().trim();
-    let anyVisible = false;
+    isLoading = true;
+    try {
+      const data = await apiArticles(reset ? null : nextCursor);
+      (data.items || []).forEach(article => {
+        articlesById[article.id] = article;
+        grid.insertBefore(buildCard(article), noResults);
+      });
+      nextCursor = data.next_cursor ?? null;
+    } catch {
+      // сетевую ошибку игнорируем — ниже покажем noResults, если пусто
+    } finally {
+      isLoading = false;
+    }
 
-    ARTICLES.forEach(article => {
-      const matchesTopic = activeTopics.size === 0
-        || article.topics.some(t => activeTopics.has(t));
-      const matchesSearch = !q
-        || article.title.toLowerCase().includes(q)
-        || article.summary.toLowerCase().includes(q);
-
-      const card = buildCard(article);
-
-      if (matchesTopic && matchesSearch) {
-        anyVisible = true;
-      } else {
-        card.classList.add('hidden');
-      }
-
-      grid.appendChild(card);
-    });
-
-    noResults.style.display = !anyVisible ? 'block' : 'none';
+    const hasCards = grid.querySelectorAll('.card').length > 0;
+    noResults.style.display = hasCards ? 'none' : 'block';
   }
 
   function buildCard(article) {
@@ -1353,22 +1276,22 @@
     card.className = 'card';
     card.dataset.id = article.id;
 
-    const tagsHtml = article.topics
-      .map(t => `<span class="card-tag">${TOPIC_LABELS[t]}</span>`)
+    const tagsHtml = (article.topics || [])
+      .map(t => `<span class="card-tag">${esc(t)}</span>`)
       .join('');
 
     card.innerHTML = `
       <div class="card-body">
         <div class="card-tags">${tagsHtml}</div>
-        <div class="card-title">${article.title}</div>
+        <div class="card-title">${esc(article.title)}</div>
       </div>
       <div class="card-actions">
         <button class="btn btn-ask" onclick="askAgent(${article.id})">Спросить агента</button>
         <button class="btn btn-more" onclick="toggleExpand(${article.id}, this)">Подробнее</button>
       </div>
       <div class="card-expand" id="expand-${article.id}">
-        <p>${article.summary}</p>
-        <a href="${article.source}" target="_blank" rel="noopener">
+        <p class="expand-body">${esc(article.summary)}</p>
+        <a href="${esc(article.source)}" target="_blank" rel="noopener">
           Читать источник →
         </a>
       </div>
@@ -1380,30 +1303,44 @@
   // ============================
   // EXPAND
   // ============================
-  function toggleExpand(id, btn) {
+  async function toggleExpand(id, btn) {
     const el = document.getElementById(`expand-${id}`);
     const isOpen = el.classList.toggle('open');
     btn.textContent = isOpen ? 'Свернуть' : 'Подробнее';
+
+    // Полный текст статьи подгружаем лениво при первом раскрытии.
+    if (isOpen && !el.dataset.loaded) {
+      el.dataset.loaded = '1';
+      const bodyEl = el.querySelector('.expand-body');
+      const prev = bodyEl.textContent;
+      bodyEl.textContent = 'Загрузка…';
+      try {
+        const detail = await loadArticleDetail(id);
+        bodyEl.textContent = detail.body || prev;
+      } catch {
+        bodyEl.textContent = prev;
+      }
+    }
   }
 
   // ============================
   // TOPIC FILTER
   // ============================
   function updateResetVisibility() {
-    document.getElementById('sidebarReset').classList.toggle('visible', activeTopics.size > 0);
+    document.getElementById('sidebarReset').classList.toggle('visible', activeThemes.size > 0);
   }
 
   function toggleTopic(el) {
-    const topic = el.dataset.topic;
-    if (activeTopics.has(topic)) {
-      activeTopics.delete(topic);
+    const id = Number(el.dataset.topic);
+    if (activeThemes.has(id)) {
+      activeThemes.delete(id);
       el.classList.remove('active');
     } else {
-      activeTopics.add(topic);
+      activeThemes.add(id);
       el.classList.add('active');
     }
     updateResetVisibility();
-    renderCards();
+    renderCards(true);
     if (window.innerWidth <= 860) {
       closeMobileMenu();
     }
@@ -1411,18 +1348,17 @@
 
   function clearTopic(event, el) {
     event.stopPropagation();
-    const topic = el.parentElement.dataset.topic;
-    activeTopics.delete(topic);
-    el.parentElement.classList.remove('active');
+    activeThemes.delete(Number(el.dataset.topic));
+    el.classList.remove('active');
     updateResetVisibility();
-    renderCards();
+    renderCards(true);
   }
 
   function resetTopics() {
-    activeTopics.clear();
+    activeThemes.clear();
     document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
     updateResetVisibility();
-    renderCards();
+    renderCards(true);
     if (window.innerWidth <= 860) {
       closeMobileMenu();
     }
@@ -1434,10 +1370,13 @@
   const searchInput = document.getElementById('searchInput');
   const searchClear = document.getElementById('searchClear');
 
+  let searchDebounce = null;
+
   searchInput.addEventListener('input', () => {
     searchQuery = searchInput.value;
     searchClear.classList.toggle('visible', searchQuery.length > 0);
-    renderCards();
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => renderCards(true), 350);
   });
 
   searchClear.addEventListener('click', () => {
@@ -1445,7 +1384,8 @@
     searchQuery = '';
     searchClear.classList.remove('visible');
     searchInput.focus();
-    renderCards();
+    clearTimeout(searchDebounce);
+    renderCards(true);
   });
 
   // ============================
@@ -1478,7 +1418,7 @@
   }
 
   function askAgent(articleId) {
-    const article = ARTICLES.find(a => a.id === articleId);
+    const article = articlesById[articleId];
     if (!article) return;
 
     const alreadyChatting = hasMessages();
@@ -1545,7 +1485,7 @@
     chatHistory = [];
 
     if (currentArticleId !== null) {
-      const article = ARTICLES.find(a => a.id === currentArticleId);
+      const article = articlesById[currentArticleId];
       appendMessage('ai', `История очищена. Готов отвечать на вопросы по статье «${article ? article.title : ''}».`);
     } else {
       appendMessage('ai', 'Чем могу помочь?');
@@ -1605,7 +1545,7 @@
     showTyping();
 
     try {
-      const article = ARTICLES.find(a => a.id === currentArticleId);
+      const article = articlesById[currentArticleId];
       const context = article ? `[Статья: ${article.title}]\n${article.summary}\n\n` : '';
       const query = context + text;
 
@@ -1659,7 +1599,20 @@
   // ============================
   // INIT
   // ============================
-  renderCards();
+  // Бесконечная прокрутка ленты: подгружаем следующую страницу по курсору.
+  document.getElementById('newsGrid').addEventListener('scroll', () => {
+    const grid = document.getElementById('newsGrid');
+    if (nextCursor && !isLoading &&
+        grid.scrollTop + grid.clientHeight >= grid.scrollHeight - 200) {
+      renderCards(false);
+    }
+  });
+
+  async function init() {
+    await loadThemes();
+    await renderCards(true);
+  }
+  init();
 </script>
 </body>
 </html>

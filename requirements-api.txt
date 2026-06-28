@@ -1,0 +1,9 @@
+# Лёгкие зависимости API для VPS (без torch/sentence-transformers).
+# Лента, деталь, темы/типы и гибридный поиск (эмбеддинг запроса — по HTTP к Ollama).
+fastapi>=0.111
+uvicorn[standard]>=0.30
+pydantic>=2.7
+asyncpg>=0.29
+qdrant-client>=1.9
+httpx>=0.27
+python-dotenv>=1.0

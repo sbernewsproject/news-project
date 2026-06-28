@@ -11,7 +11,9 @@ services:
       POSTGRES_DB: mydb
     volumes:
       - ./scripts/init.sh:/docker-entrypoint-initdb.d/init.sh
+      - ./db/migrations:/migrations:ro
       - ./dumps:/dumps
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d mydb"]
       interval: 10s
@@ -34,9 +36,35 @@ services:
     networks:
       - rag-network
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: news-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Postgres и Qdrant — по именам сервисов внутри сети compose.
+      POSTGRES_DSN: postgresql://user:password@postgres:5432/mydb
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: password
+      # GPU-хост: эмбеддинг запроса (Ollama) и RAG-сервис для /query.
+      OLLAMA_URL: ${OLLAMA_URL:-http://gpu-host:11434}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-bge-m3}
+      RAG_URL: ${RAG_URL:-http://gpu-host:8001}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    networks:
+      - rag-network
+
 networks:
   rag-network:
     driver: bridge
 
 volumes:
   qdrantdata:
+  pgdata:

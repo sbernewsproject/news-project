@@ -1,0 +1,17 @@
+# Тяжёлый образ RAG для GPU-хоста: модели BGE-M3, реранкер, RAG-цепочка.
+# База с CUDA-сборкой torch. Тег при необходимости подогнать под CUDA хоста.
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/root/.cache/huggingface
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Код RAG-сервиса (dumps/.venv/parser-данные исключены через .dockerignore).
+COPY . .
+
+EXPOSE 8001
+CMD ["uvicorn", "rag.server:app", "--host", "0.0.0.0", "--port", "8001"]
