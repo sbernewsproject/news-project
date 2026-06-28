@@ -9,7 +9,7 @@ from ragu.models.openai import CachedAsyncOpenAI
 from ragu.triplet import RaguLmArtifactExtractor
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:32b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:32b")
 RAGU_LM_MODEL = os.getenv("RAGU_LM_MODEL", "ragu-lm")
 
 Settings.storage_folder = os.getenv("GRAPH_WORKING_DIR", "./ragu_working_dir")
