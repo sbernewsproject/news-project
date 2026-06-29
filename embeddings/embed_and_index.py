@@ -29,7 +29,7 @@ class NewsIndexer:
         # None → in-memory Qdrant для тестов без Docker
         self.model = SentenceTransformer(MODEL_NAME)
         if qdrant_url:
-            self.client = QdrantClient(url=qdrant_url, api_key=api_key)
+            self.client = QdrantClient(url=qdrant_url, api_key=api_key, timeout=120)
         else:
             self.client = QdrantClient(":memory:")
         self._ensure_collection()
