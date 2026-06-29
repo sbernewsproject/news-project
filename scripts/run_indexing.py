@@ -36,14 +36,18 @@ async def insert_chunks(conn, chunks) -> list[int]:
 async def main() -> None:
     indexer = NewsIndexer(qdrant_url=QDRANT_URL, api_key=QDRANT_API_KEY)
 
-    conn = await asyncpg.connect(POSTGRES_DSN)
+    pool = await asyncpg.create_pool(POSTGRES_DSN, min_size=1, max_size=3)
     try:
-        rows = await conn.fetch(
-            "SELECT article_id, author, title, arttext, arturl, mark, parsedate, createdate, types_id FROM article"
-            " WHERE article_id NOT IN (SELECT DISTINCT article_id FROM chunk)"
-        )
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT article_id, author, title, arttext, arturl, mark, parsedate, createdate, types_id FROM article"
+                " WHERE article_id NOT IN (SELECT DISTINCT article_id FROM chunk)"
+            )
 
-        for row in rows:
+        total = len(rows)
+        print(f"Статей для индексации: {total}")
+
+        for i, row in enumerate(rows, 1):
             article = Article(
                 article_id=row["article_id"],
                 author=row["author"],
@@ -58,8 +62,9 @@ async def main() -> None:
 
             chunks = chunk_article(article)
 
-            async with conn.transaction():
-                db_chunk_ids = await insert_chunks(conn, chunks)
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    db_chunk_ids = await insert_chunks(conn, chunks)
 
             indexable = [
                 IndexableChunk(
@@ -72,11 +77,12 @@ async def main() -> None:
             ]
 
             indexer.index(indexable)
-            print(f"Проиндексирована статья {article.article_id}: {len(chunks)} чанков")
+            if i % 100 == 0 or i == total:
+                print(f"[{i}/{total}] статья {article.article_id}: {len(chunks)} чанков")
 
         print("Готово")
     finally:
-        await conn.close()
+        await pool.close()
 
 
 if __name__ == "__main__":
