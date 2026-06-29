@@ -35,7 +35,7 @@ def _make_embedder():
         api_key="ollama",
         rate_max_simultaneous=5,
     )
-    return EmbedderOpenAI(client=client, model_name=OLLAMA_EMBED_MODEL, dim=1024, batch_size=500)
+    return EmbedderOpenAI(client=client, model_name=OLLAMA_EMBED_MODEL, dim=1024, batch_size=32)
 
 
 def _ensure_collection(qdrant: QdrantClient) -> None:
