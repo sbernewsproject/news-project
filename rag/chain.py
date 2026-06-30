@@ -110,7 +110,7 @@ async def _generate(context: str, query: str) -> str:
                         {"role": "user", "content": user_msg},
                     ],
                     "stream": False,
-                    "think": False,
+                    #"think": False,
                 },
             )
             resp.raise_for_status()

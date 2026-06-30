@@ -4,7 +4,7 @@ import os
 import sys
 
 import asyncpg
-import ijson
+import json
 
 DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5432/mydb")
 
@@ -145,3 +145,5 @@ if __name__ == "__main__":
         print("Использование: python3 insertnews.py <путь_к_файлу.json>")
         sys.exit(1)
     asyncio.run(process(sys.argv[1]))
+
+
