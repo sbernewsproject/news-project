@@ -5,3 +5,11 @@ __pycache__/
 .DS_Store
 .idea
 CLAUDE.md
+
+# Артефакты — не версионируем (тяжёлые, регенерируемые)
+# Дампы БД и Qdrant (восстанавливаются через docker/backup.sh)
+dumps/
+# Состояние и результаты парсеров
+parser/*/parsed_articles.json
+parser/*/*_progress.json
+parser/*/all_article_links.txt
