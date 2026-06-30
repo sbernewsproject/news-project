@@ -15,10 +15,13 @@ import asyncpg
 import httpx
 
 from embeddings.embed_and_index import NewsIndexer, Reranker
+from embeddings.remote import embed_query as _remote_embed_query
 from graph.search import global_search, local_search
+from qdrant_client import QdrantClient
+from embeddings.embed_and_index import COLLECTION
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:32b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:32b")
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5432/mydb")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
@@ -107,6 +110,7 @@ async def _generate(context: str, query: str) -> str:
                         {"role": "user", "content": user_msg},
                     ],
                     "stream": False,
+                    "think": False,
                 },
             )
             resp.raise_for_status()
@@ -117,15 +121,25 @@ async def _generate(context: str, query: str) -> str:
 
 class RAGChain:
     def __init__(self, qdrant_url: str = QDRANT_URL, api_key: Optional[str] = QDRANT_API_KEY):
-        # BGE-M3 и reranker загружаются один раз при создании цепочки
-        self._indexer = NewsIndexer(qdrant_url=qdrant_url, api_key=api_key)
+        self._use_remote_embed = bool(OLLAMA_URL)
+        if self._use_remote_embed:
+            self._qdrant = QdrantClient(url=qdrant_url, api_key=api_key, timeout=120)
+        else:
+            self._indexer = NewsIndexer(qdrant_url=qdrant_url, api_key=api_key)
         self._reranker = Reranker()
+
+    async def _search(self, query: str, top_k: int) -> list[tuple[int, float]]:
+        if self._use_remote_embed:
+            vector = await _remote_embed_query(query)
+            results = self._qdrant.query_points(collection_name=COLLECTION, query=vector, limit=top_k)
+            return [(r.id, r.score) for r in results.points]
+        return self._indexer.search(query, top_k=top_k)
 
     async def answer(self, query: str, top_k: int = TOP_K) -> str:
         route = _route(query)
 
         # Векторный поиск всегда; фильтруем по порогу до обращения в Postgres
-        results = self._indexer.search(query, top_k=top_k)
+        results = await self._search(query, top_k=top_k)
         chunk_ids = [cid for cid, score in results if score >= SCORE_THRESHOLD]
 
         if not chunk_ids and route == "dense":
