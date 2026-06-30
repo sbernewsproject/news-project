@@ -37,6 +37,15 @@ echo ">>> Комсомольская Правда: insertnews..."
 $INSERT parser/komsomolskaya_pravda/parsed_articles.json
 
 echo ""
+echo ">>> Индексация новых статей в Qdrant..."
+QDRANT_URL=http://localhost:6333 \
+QDRANT_API_KEY=password \
+POSTGRES_DSN=postgresql://user:password@localhost:5432/mydb \
+BGE_MODEL_PATH=$HOME/models/bge-m3 \
+PYTHONPATH=. \
+$VENV scripts/run_indexing.py
+
+echo ""
 echo "=============================="
 echo "Готово: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=============================="
