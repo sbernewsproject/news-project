@@ -1279,6 +1279,7 @@
   let searchQuery = '';
   let nextCursor = null;          // курсор пагинации (article_id) или null
   let isLoading = false;
+  let renderId = 0;
   const articlesById = {};        // id → карточка (для контекста чата)
   let searchIndex = null;         // кэш всех статей для клиентского поиска (грузится один раз)
   let searchIndexLoading = null;  // промис текущей загрузки индекса, чтобы не запускать параллельно
@@ -1312,8 +1313,13 @@
   // ============================
   // RENDER
   // ============================
-  async function renderCards(reset = false) {
-    if (isLoading) return;
+
+
+    async function renderCards(reset = false) {
+    // Если идет загрузка и это НЕ сброс фильтров (например, подгрузка при скролле), то выходим
+    if (isLoading && !reset) return;
+
+    const myRenderId = ++renderId; // Увеличиваем счетчик и запоминаем его для этого запроса
     const grid = document.getElementById('newsGrid');
     const noResults = document.getElementById('noResults');
     const q = searchQuery.trim();
@@ -1326,9 +1332,10 @@
     isLoading = true;
     try {
       if (q) {
-        // Поиск выполняется на клиенте по полному локальному индексу статей —
-        // это гарантирует корректную работу поиска независимо от бэкенда.
         const index = await loadSearchIndex();
+        // Проверяем, не устарел ли этот запрос (пока мы ждали, пользователь мог ввести новый текст)
+        if (myRenderId !== renderId) return;
+
         if (searchQuery.trim() === q) {
           const matches = index.filter(a => matchesQuery(a, q));
           matches.forEach(article => {
@@ -1338,6 +1345,9 @@
         }
       } else {
         const data = await apiArticles(reset ? null : nextCursor);
+        // Проверяем, не устарел ли этот запрос (пока мы ждали, пользователь мог снять/надеть фильтр)
+        if (myRenderId !== renderId) return;
+
         (data.items || []).forEach(article => {
           articlesById[article.id] = article;
           grid.insertBefore(buildCard(article), noResults);
@@ -1347,12 +1357,19 @@
     } catch {
       // сетевую ошибку игнорируем — ниже покажем noResults, если пусто
     } finally {
-      isLoading = false;
+      // Сбрасываем флаг загрузки только если это был самый последний (актуальный) запрос
+      if (myRenderId === renderId) {
+        isLoading = false;
+      }
     }
 
-    const hasCards = grid.querySelectorAll('.card').length > 0;
-    noResults.style.display = hasCards ? 'none' : 'block';
+    // Обновляем сообщение "Ничего не найдено" только для актуального запроса
+    if (myRenderId === renderId) {
+      const hasCards = grid.querySelectorAll('.card').length > 0;
+      noResults.style.display = hasCards ? 'none' : 'block';
+    }
   }
+
 
   function buildCard(article) {
     const card = document.createElement('div');
@@ -1584,20 +1601,41 @@
     return div;
   }
 
-  function showTyping() {
+  let typingInterval = null;
+
+function showTyping() {
     const msgs = document.getElementById('aiMessages');
     const div = document.createElement('div');
     div.className = 'msg-typing';
     div.id = 'typingIndicator';
-    div.innerHTML = '<div class="dot-anim"></div><div class="dot-anim"></div><div class="dot-anim"></div>';
+    div.innerHTML = `
+      <span class="typing-text">Думаю</span>
+      <div class="dot-anim"></div>
+      <div class="dot-anim"></div>
+      <div class="dot-anim"></div>
+    `;
     msgs.appendChild(div);
     msgs.scrollTop = msgs.scrollHeight;
-  }
+
+    const phrases = ['Думаю', 'Ищу информацию', 'Анализирую', 'Формирую ответ'];
+    let idx = 0;
+    const textEl = div.querySelector('.typing-text');
+
+    clearInterval(typingInterval);
+    typingInterval = setInterval(() => {
+      idx = (idx + 1) % phrases.length;
+      textEl.textContent = phrases[idx];
+    }, 1500);
+}
 
   function removeTyping() {
     const el = document.getElementById('typingIndicator');
     if (el) el.remove();
-  }
+    if (typingInterval) {
+      clearInterval(typingInterval);
+      typingInterval = null;
+    }
+}
 
   async function sendMessage() {
     const input = document.getElementById('aiInput');
