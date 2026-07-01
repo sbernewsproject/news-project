@@ -673,7 +673,7 @@
   opacity: 0.9;
   transition: opacity 0.3s ease;
 }
-    
+
     .ai-context-bar > span:first-child {
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1645,7 +1645,7 @@ function showTyping() {
     }
 }
 
-  async function sendMessage() {
+    async function sendMessage() {
     const input = document.getElementById('aiInput');
     const text = input.value.trim();
     if (!text || isTyping) return;
@@ -1657,7 +1657,11 @@ function showTyping() {
 
     isTyping = true;
     document.getElementById('aiSendBtn').disabled = true;
-    showTyping();
+    // НЕ вызываем showTyping() здесь — покажем только когда сервер начнёт "думать"
+
+    const msgs = document.getElementById('aiMessages');
+    let msgDiv = null;              // создадим только когда придёт реальный контент
+    let thinkingShown = false;      // флаг: показан ли сейчас индикатор "Думаю"
 
     try {
       const article = articlesById[currentArticleId];
@@ -1670,15 +1674,11 @@ function showTyping() {
         body: JSON.stringify({ query, top_k: 5 }),
       });
 
-      removeTyping();
-
       if (!resp.ok) {
         appendMessage('ai', 'Произошла ошибка при обращении к серверу. Попробуйте ещё раз.');
         return;
       }
 
-      const msgs = document.getElementById('aiMessages');
-      const msgDiv = appendMessage('ai', '');
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let sseBuffer = '';
@@ -1691,27 +1691,77 @@ function showTyping() {
         sseBuffer += decoder.decode(value, { stream: true });
         const lines = sseBuffer.split('\n');
         sseBuffer = lines.pop();
+
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6);
           if (payload === '[DONE]') break outer;
+
           try {
             const parsed = JSON.parse(payload);
-            if (parsed.error) { msgDiv.textContent = 'Ошибка: ' + parsed.error; break outer; }
-            if (parsed.token) {
-              rawContent += parsed.token;
-              if (thinkEndIdx === -1) thinkEndIdx = rawContent.indexOf('</think>');
-              const display = thinkEndIdx !== -1
-                ? rawContent.slice(thinkEndIdx + 8).trimStart()
-                : (rawContent.startsWith('<think>') ? 'Анализирую...' : rawContent);
-              msgDiv.textContent = display;
-              msgs.scrollTop = msgs.scrollHeight;
+            if (parsed.error) {
+              removeTyping();
+              appendMessage('ai', 'Ошибка: ' + parsed.error);
+              break outer;
             }
+
+            // === ЛОГИКА "ДУМАЮ" ===
+            const token = parsed.token || '';
+
+            // Случай 1: сервер прислал пустой пакет — он думает
+            if (!token || token.trim() === '') {
+              if (!thinkingShown) {
+                showTyping();
+                thinkingShown = true;
+              }
+              continue;
+            }
+
+            // Случай 2: токен есть, накапливаем
+            rawContent += token;
+            if (thinkEndIdx === -1) {
+              thinkEndIdx = rawContent.indexOf('</think>');
+            }
+
+            // Пока мы внутри <think>...</think> — сервер думает
+            const isThinking = thinkEndIdx === -1 && rawContent.trimStart().startsWith('<think>');
+
+            if (isThinking) {
+              // Показываем индикатор, если его ещё нет
+              if (!thinkingShown) {
+                showTyping();
+                thinkingShown = true;
+              }
+              continue;
+            }
+
+            // Случай 3: пришёл реальный контент (после </think> или без него)
+            // Убираем индикатор "Думаю" и создаём/обновляем msgDiv
+            if (thinkingShown) {
+              removeTyping();
+              thinkingShown = false;
+            }
+
+            if (!msgDiv) {
+              msgDiv = appendMessage('ai', '');
+            }
+
+            const display = thinkEndIdx !== -1
+              ? rawContent.slice(thinkEndIdx + 8).trimStart()
+              : rawContent;
+            msgDiv.textContent = display;
+            msgs.scrollTop = msgs.scrollHeight;
+
           } catch { /* skip malformed line */ }
         }
       }
 
-      const finalText = msgDiv.textContent;
+      // Если так и не убрали индикатор (сервер закончил, не дав ответа) — убираем
+      if (thinkingShown) {
+        removeTyping();
+      }
+
+      const finalText = msgDiv ? msgDiv.textContent : '';
       if (finalText && finalText !== 'Анализирую...') {
         chatHistory.push({ role: 'assistant', content: finalText });
       }
