@@ -34,9 +34,9 @@ async def embed_query(query: str, *, timeout: float = 30.0) -> list[float]:
     """
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(
-            f"{OLLAMA_URL}/api/embeddings",
-            json={"model": OLLAMA_EMBED_MODEL, "prompt": f"{_QUERY_PREFIX}{query}"},
+            f"{OLLAMA_URL}/api/embed",
+            json={"model": OLLAMA_EMBED_MODEL, "input": f"{_QUERY_PREFIX}{query}"},
         )
         resp.raise_for_status()
-        embedding = resp.json()["embedding"]
+        embedding = resp.json()["embeddings"][0]
     return _l2_normalize(embedding)
