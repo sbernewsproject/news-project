@@ -9,11 +9,14 @@ VPS (api/main.py) проксирует сюда POST /query. Postgres и Qdrant 
 Запуск: uvicorn rag.server:app --host 0.0.0.0 --port 8001
 """
 
+
+import json as _json
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 _chain = None  # RAGChain, поднимается один раз на старте (загрузка моделей)
@@ -51,6 +54,18 @@ async def query(req: QueryRequest) -> QueryResponse:
         return QueryResponse(answer=result, route=_route(req.query))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/query/stream")
+async def query_stream(req: QueryRequest):
+    async def gen():
+        try:
+            async for token in _chain.stream_answer(req.query, top_k=req.top_k):
+                yield f"data: {_json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {_json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 @app.post("/index/article")

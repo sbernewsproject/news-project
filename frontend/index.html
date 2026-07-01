@@ -1549,7 +1549,7 @@
       const context = article ? `[Статья: ${article.title}]\n${article.summary}\n\n` : '';
       const query = context + text;
 
-      const resp = await fetch('/query', {
+      const resp = await fetch('/query/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, top_k: 5 }),
@@ -1557,13 +1557,48 @@
 
       removeTyping();
 
-      if (resp.ok) {
-        const data = await resp.json();
-        const answer = data.answer || 'Не удалось получить ответ.';
-        appendMessage('ai', answer);
-        chatHistory.push({ role: 'assistant', content: answer });
-      } else {
+      if (!resp.ok) {
         appendMessage('ai', 'Произошла ошибка при обращении к серверу. Попробуйте ещё раз.');
+        return;
+      }
+
+      const msgs = document.getElementById('aiMessages');
+      const msgDiv = appendMessage('ai', '');
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = '';
+      let rawContent = '';
+      let thinkEndIdx = -1;
+
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split('\n');
+        sseBuffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6);
+          if (payload === '[DONE]') break outer;
+          try {
+            const parsed = JSON.parse(payload);
+            if (parsed.error) { msgDiv.textContent = 'Ошибка: ' + parsed.error; break outer; }
+            if (parsed.token) {
+              rawContent += parsed.token;
+              if (thinkEndIdx === -1) thinkEndIdx = rawContent.indexOf('</think>');
+              const display = thinkEndIdx !== -1
+                ? rawContent.slice(thinkEndIdx + 8).trimStart()
+                : (rawContent.startsWith('<think>') ? 'Анализирую...' : rawContent);
+              msgDiv.textContent = display;
+              msgs.scrollTop = msgs.scrollHeight;
+            }
+          } catch { /* skip malformed line */ }
+        }
+      }
+
+      const finalText = msgDiv.textContent;
+      if (finalText && finalText !== 'Анализирую...') {
+        chatHistory.push({ role: 'assistant', content: finalText });
       }
     } catch {
       removeTyping();

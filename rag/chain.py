@@ -7,9 +7,10 @@
 """
 
 import asyncio
+import json as _json
 import os
 import re
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
 import asyncpg
 import httpx
@@ -119,6 +120,36 @@ async def _generate(context: str, query: str) -> str:
         return f"[Ollama недоступен] Найдено {context.count('<doc')} релевантных фрагментов. Настройте OLLAMA_URL для генерации ответа."
 
 
+async def _generate_stream(context: str, query: str) -> AsyncGenerator[str, None]:
+    user_msg = f"Контекст:\n{context}\n\nЗапрос: {query}"
+    try:
+        async with httpx.AsyncClient(timeout=180) as client:
+            async with client.stream(
+                "POST",
+                f"{OLLAMA_URL}/api/chat",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    "stream": True,
+                },
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line:
+                        continue
+                    data = _json.loads(line)
+                    token = data.get("message", {}).get("content", "")
+                    if token:
+                        yield token
+                    if data.get("done"):
+                        break
+    except Exception:
+        yield f"[Ollama недоступен] Найдено {context.count('<doc')} релевантных фрагментов."
+
+
 class RAGChain:
     def __init__(self, qdrant_url: str = QDRANT_URL, api_key: Optional[str] = QDRANT_API_KEY):
         self._use_remote_embed = bool(OLLAMA_URL)
@@ -134,6 +165,45 @@ class RAGChain:
             results = self._qdrant.query_points(collection_name=COLLECTION, query=vector, limit=top_k)
             return [(r.id, r.score) for r in results.points]
         return self._indexer.search(query, top_k=top_k)
+
+    async def stream_answer(self, query: str, top_k: int = TOP_K) -> AsyncGenerator[str, None]:
+        route = _route(query)
+        results = await self._search(query, top_k=top_k)
+        chunk_ids = [cid for cid, score in results if score >= SCORE_THRESHOLD]
+
+        if not chunk_ids and route == "dense":
+            yield "Недостаточно данных в базе знаний."
+            return
+
+        if route == "global":
+            try:
+                chunks, graph_ctx = await asyncio.gather(
+                    _fetch_chunks(chunk_ids), global_search(query)
+                )
+            except Exception:
+                chunks = await _fetch_chunks(chunk_ids)
+                graph_ctx = None
+        elif route == "local":
+            try:
+                chunks, graph_ctx = await asyncio.gather(
+                    _fetch_chunks(chunk_ids), local_search(query)
+                )
+            except Exception:
+                chunks = await _fetch_chunks(chunk_ids)
+                graph_ctx = None
+        else:
+            chunks = await _fetch_chunks(chunk_ids)
+            graph_ctx = None
+
+        if not chunks and not graph_ctx:
+            yield "Недостаточно данных в базе знаний."
+            return
+
+        chunks = self._reranker.rerank(query, chunks, top_n=TOP_N)
+        context = _assemble_context(chunks, graph_ctx)
+
+        async for token in _generate_stream(context, query):
+            yield token
 
     async def answer(self, query: str, top_k: int = TOP_K) -> str:
         route = _route(query)
