@@ -8,6 +8,21 @@ from ragu.models.llm import LLMOpenAI
 from ragu.models.openai import CachedAsyncOpenAI
 from ragu.triplet import RaguLmArtifactExtractor
 
+# Патч бага graph-ragu: _run возвращает корутину без await
+from ragu.triplet import ragu_lm_artifact_extractor as _ragu_ext
+
+async def _patched_run(self, conversations, description=""):
+    return await self.llm.batch_chat_completion(
+        [c.to_openai() for c in conversations],
+        output_schema=str,
+        continue_on_error=True,
+        temperature=self.temperature,
+        top_p=self.top_p,
+        desc=description,
+    )
+
+_ragu_ext.RaguLMArtifactExtractor._run = _patched_run
+
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:32b")
 RAGU_LM_MODEL = os.getenv("RAGU_LM_MODEL", "ragu-lm")
