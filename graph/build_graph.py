@@ -55,7 +55,7 @@ def _init() -> None:
         batch_size=64,
     )
     ragu_lm = LLMOpenAI(
-        client=_client(rate_max_simultaneous=4),
+        client=_client(rate_max_simultaneous=1),
         model_name=RAGU_LM_MODEL,
     )
     _knowledge_graph = KnowledgeGraph(
