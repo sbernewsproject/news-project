@@ -21,7 +21,7 @@ async def _patched_run(self, conversations, description=""):
         desc=description,
     )
 
-_ragu_ext.RaguLMArtifactExtractor._run = _patched_run
+_ragu_ext.RaguLmArtifactExtractor._run = _patched_run
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:32b")
