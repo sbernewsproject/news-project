@@ -5,7 +5,7 @@ from typing import Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -74,6 +74,18 @@ async def query(req: QueryRequest) -> QueryResponse:
         return QueryResponse(answer=result, route=_route(req.query))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/query/stream")
+async def query_stream(req: QueryRequest):
+    if RAG_URL:
+        async def proxy():
+            async with httpx.AsyncClient(timeout=180) as client:
+                async with client.stream("POST", f"{RAG_URL}/query/stream", json=req.model_dump()) as resp:
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+        return StreamingResponse(proxy(), media_type="text/event-stream")
+    raise HTTPException(status_code=501, detail="RAG_URL не настроен")
 
 
 @app.post("/index/article")
