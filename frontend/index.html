@@ -29,6 +29,7 @@
     html {
       height: 100%;
       width: 100%;
+      overflow-x: hidden;
     }
 
     body {
@@ -48,6 +49,7 @@
       height: 100%;
       height: 100vh;
       height: -webkit-fill-available;
+      height: 100dvh;
       overflow: hidden;
     }
 
@@ -73,6 +75,10 @@
       flex: 1;
       text-align: center;
       padding: 0 44px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
     }
 
     /* ===== MENU TOGGLE (HAMBURGER) ===== */
@@ -132,7 +138,14 @@
       gap: 4px;
       flex-shrink: 0;
       z-index: 10;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
     }
+
+    .sidebar::-webkit-scrollbar { width: 5px; }
+    .sidebar::-webkit-scrollbar-track { background: transparent; }
+    .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 3px; }
 
     .sidebar-item {
       position: relative;
@@ -906,6 +919,7 @@
         width: 100%;
         height: 100%;
         height: -webkit-fill-available;
+        height: 100dvh;
         margin: 0;
         border-radius: 0;
         z-index: 100;
@@ -1162,6 +1176,19 @@
       .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
   }
 
+  // Обрезает краткое содержание до 1-2 предложений (примерно 180 символов),
+  // стараясь не разрывать слово или предложение посередине.
+  function truncateSummary(text, maxLen = 180) {
+    const t = String(text ?? '').trim();
+    if (!t) return '';
+    if (t.length <= maxLen) return t;
+    const cut = t.slice(0, maxLen);
+    const sentenceEnd = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+    if (sentenceEnd > 40) return cut.slice(0, sentenceEnd + 1);
+    const lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trim() + '…';
+  }
+
   async function fetchJSON(url) {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -1184,6 +1211,46 @@
 
   async function loadArticleDetail(id) {
     return fetchJSON(`/api/articles/${id}`);
+  }
+
+  // Загружает весь список статей постранично (один раз) для клиентского поиска.
+  // Так поиск работает корректно и предсказуемо независимо от того, как
+  // (и работает ли вообще) параметр "q" обрабатывается на бэкенде.
+  async function loadSearchIndex() {
+    if (searchIndex) return searchIndex;
+    if (searchIndexLoading) return searchIndexLoading;
+
+    searchIndexLoading = (async () => {
+      const all = [];
+      let cursor = null;
+      for (let guard = 0; guard < 100; guard++) {
+        const p = new URLSearchParams();
+        p.set('limit', '50');
+        if (cursor) p.set('cursor', cursor);
+        const data = await fetchJSON(`/api/articles?${p.toString()}`);
+        (data.items || []).forEach(a => { articlesById[a.id] = a; all.push(a); });
+        cursor = data.next_cursor ?? null;
+        if (!cursor) break;
+      }
+      searchIndex = all;
+      return all;
+    })();
+
+    try {
+      return await searchIndexLoading;
+    } finally {
+      searchIndexLoading = null;
+    }
+  }
+
+  function matchesQuery(article, q) {
+    const needle = q.toLowerCase();
+    const haystacks = [
+      article.title,
+      article.summary,
+      ...(article.topics || []),
+    ];
+    return haystacks.some(v => String(v ?? '').toLowerCase().includes(needle));
   }
 
   // Сайдбар тем строится из реальных разделов БД (GET /api/themes).
@@ -1213,6 +1280,8 @@
   let nextCursor = null;          // курсор пагинации (article_id) или null
   let isLoading = false;
   const articlesById = {};        // id → карточка (для контекста чата)
+  let searchIndex = null;         // кэш всех статей для клиентского поиска (грузится один раз)
+  let searchIndexLoading = null;  // промис текущей загрузки индекса, чтобы не запускать параллельно
   let currentArticleId = null;
   let chatHistory = [];
   let isTyping = false;
@@ -1247,6 +1316,7 @@
     if (isLoading) return;
     const grid = document.getElementById('newsGrid');
     const noResults = document.getElementById('noResults');
+    const q = searchQuery.trim();
 
     if (reset) {
       nextCursor = null;
@@ -1255,12 +1325,25 @@
 
     isLoading = true;
     try {
-      const data = await apiArticles(reset ? null : nextCursor);
-      (data.items || []).forEach(article => {
-        articlesById[article.id] = article;
-        grid.insertBefore(buildCard(article), noResults);
-      });
-      nextCursor = data.next_cursor ?? null;
+      if (q) {
+        // Поиск выполняется на клиенте по полному локальному индексу статей —
+        // это гарантирует корректную работу поиска независимо от бэкенда.
+        const index = await loadSearchIndex();
+        if (searchQuery.trim() === q) {
+          const matches = index.filter(a => matchesQuery(a, q));
+          matches.forEach(article => {
+            grid.insertBefore(buildCard(article), noResults);
+          });
+          nextCursor = null;
+        }
+      } else {
+        const data = await apiArticles(reset ? null : nextCursor);
+        (data.items || []).forEach(article => {
+          articlesById[article.id] = article;
+          grid.insertBefore(buildCard(article), noResults);
+        });
+        nextCursor = data.next_cursor ?? null;
+      }
     } catch {
       // сетевую ошибку игнорируем — ниже покажем noResults, если пусто
     } finally {
@@ -1290,7 +1373,7 @@
         <button class="btn btn-more" onclick="toggleExpand(${article.id}, this)">Подробнее</button>
       </div>
       <div class="card-expand" id="expand-${article.id}">
-        <p class="expand-body">${esc(article.summary)}</p>
+        <p class="expand-body">${esc(truncateSummary(article.summary))}</p>
         <a href="${esc(article.source)}" target="_blank" rel="noopener">
           Читать источник →
         </a>
@@ -1303,24 +1386,10 @@
   // ============================
   // EXPAND
   // ============================
-  async function toggleExpand(id, btn) {
+  function toggleExpand(id, btn) {
     const el = document.getElementById(`expand-${id}`);
     const isOpen = el.classList.toggle('open');
     btn.textContent = isOpen ? 'Свернуть' : 'Подробнее';
-
-    // Полный текст статьи подгружаем лениво при первом раскрытии.
-    if (isOpen && !el.dataset.loaded) {
-      el.dataset.loaded = '1';
-      const bodyEl = el.querySelector('.expand-body');
-      const prev = bodyEl.textContent;
-      bodyEl.textContent = 'Загрузка…';
-      try {
-        const detail = await loadArticleDetail(id);
-        bodyEl.textContent = detail.body || prev;
-      } catch {
-        bodyEl.textContent = prev;
-      }
-    }
   }
 
   // ============================
