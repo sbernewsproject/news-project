@@ -119,7 +119,7 @@ async def _build_from_postgres() -> None:
     limit = int(os.getenv("GRAPH_LIMIT", "0")) or None
     days = int(os.getenv("GRAPH_DAYS", "0")) or None
 
-    conn = await asyncpg.connect(dsn)
+    conn = await asyncpg.connect(dsn, statement_cache_size=0)
     try:
         texts = await _fetch_articles(conn, limit=limit, days=days)
     finally:
