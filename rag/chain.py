@@ -27,9 +27,10 @@ POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-TOP_K = 50   # сколько берём из Qdrant до reranker'а
+TOP_K = 50   # сколько берём из каждого источника (Qdrant + FTS) до reranker'а
 TOP_N = 10   # сколько отдаём в контекст после reranker'а
 SCORE_THRESHOLD = 0.5  # чанки ниже порога отбрасываются до генерации, нужно будет подкрутить на реальных данных.
+_RRF_K = 60  # константа сглаживания reciprocal rank fusion
 
 SYSTEM_PROMPT = """\
 Ты — аналитик, создающий новостные сводки на русском языке.
@@ -98,6 +99,38 @@ def _verify_citations(answer: str, num_docs: int) -> list[int]:
     return [c for c in cited if c < 1 or c > num_docs]
 
 
+async def _fts_search(query: str, limit: int) -> list[int]:
+    """Полнотекстовый поиск по таблице chunk. При ошибке возвращает пустой список."""
+    try:
+        conn = await asyncpg.connect(POSTGRES_DSN)
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT chunk_id
+                FROM chunk
+                WHERE tsv @@ websearch_to_tsquery('russian', $1)
+                ORDER BY ts_rank(tsv, websearch_to_tsquery('russian', $1)) DESC
+                LIMIT $2
+                """,
+                query,
+                limit,
+            )
+            return [r["chunk_id"] for r in rows]
+        finally:
+            await conn.close()
+    except Exception:
+        return []
+
+
+def _rrf(qdrant_ids: list[int], fts_ids: list[int]) -> list[int]:
+    scores: dict[int, float] = {}
+    for rank, cid in enumerate(qdrant_ids):
+        scores[cid] = scores.get(cid, 0.0) + 1.0 / (_RRF_K + rank)
+    for rank, cid in enumerate(fts_ids):
+        scores[cid] = scores.get(cid, 0.0) + 1.0 / (_RRF_K + rank)
+    return sorted(scores, key=lambda c: scores[c], reverse=True)
+
+
 async def _generate(context: str, query: str) -> str:
     user_msg = f"Контекст:\n{context}\n\nЗапрос: {query}"
     try:
@@ -162,8 +195,20 @@ class RAGChain:
     async def _search(self, query: str, top_k: int) -> list[tuple[int, float]]:
         if self._use_remote_embed:
             vector = await _remote_embed_query(query)
-            results = self._qdrant.query_points(collection_name=COLLECTION, query=vector, limit=top_k)
-            return [(r.id, r.score) for r in results.points]
+            qdrant_results, fts_ids = await asyncio.gather(
+                asyncio.to_thread(
+                    self._qdrant.query_points,
+                    collection_name=COLLECTION,
+                    query=vector,
+                    limit=top_k,
+                ),
+                _fts_search(query, top_k),
+            )
+            qdrant_scored = {r.id: r.score for r in qdrant_results.points}
+            merged = _rrf(list(qdrant_scored), fts_ids)[:top_k]
+            # FTS-only чанки получают score = SCORE_THRESHOLD чтобы пройти фильтр;
+            # reranker потом расставит их по релевантности.
+            return [(cid, qdrant_scored.get(cid, SCORE_THRESHOLD)) for cid in merged]
         return self._indexer.search(query, top_k=top_k)
 
     async def stream_answer(self, query: str, top_k: int = TOP_K) -> AsyncGenerator[str, None]:
