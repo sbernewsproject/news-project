@@ -45,6 +45,14 @@ def _ensure_collection(qdrant: QdrantClient) -> None:
             collection_name=COLLECTION,
             vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.DOT),
         )
+    try:
+        from qdrant_client.models import SparseVectorParams, SparseIndexParams
+        qdrant.update_collection(
+            collection_name=COLLECTION,
+            sparse_vectors_config={"bm25": SparseVectorParams(index=SparseIndexParams(on_disk=False))},
+        )
+    except Exception:
+        pass
 
 
 async def insert_chunks(conn, chunks) -> list[int]:
@@ -125,10 +133,29 @@ async def main() -> None:
                 prefixed = [f"passage: {c.chunk_text}" for c in indexable]
                 vectors = await embedder.batch_embed_text(prefixed)
                 vectors = [_l2_normalize(v) for v in vectors]
-                points = [
-                    PointStruct(id=c.chunk_id, vector=v, payload=c.payload)
-                    for c, v in zip(indexable, vectors)
-                ]
+
+                try:
+                    from fastembed import SparseTextEmbedding
+                    from qdrant_client.models import SparseVector
+                    _enc = SparseTextEmbedding(model_name="Qdrant/bm25")
+                    sparse_vecs = list(_enc.embed([c.chunk_text for c in indexable]))
+                    points = [
+                        PointStruct(
+                            id=c.chunk_id,
+                            vector={
+                                "": v,
+                                "bm25": SparseVector(indices=sv.indices.tolist(), values=sv.values.tolist()),
+                            },
+                            payload=c.payload,
+                        )
+                        for c, v, sv in zip(indexable, vectors, sparse_vecs)
+                    ]
+                except Exception:
+                    points = [
+                        PointStruct(id=c.chunk_id, vector=v, payload=c.payload)
+                        for c, v in zip(indexable, vectors)
+                    ]
+
                 qdrant.upsert(collection_name=COLLECTION, points=points)
             else:
                 indexer.index(indexable)
