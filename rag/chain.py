@@ -1,9 +1,9 @@
 """
 Основная RAG-цепочка:
   1. Роутинг запроса → local / global / dense
-  2. Векторный поиск в Qdrant → тексты чанков из Postgres
-  3. Поиск по графу через RAGU (если нужен по маршруту)
-  4. Сборка контекста → генерация ответа через Ollama
+  2. Гибридный поиск: Dense (Qdrant) + Sparse BM25 (Qdrant) + FTS (Postgres) + HyDE
+  3. Reranker отбирает TOP_N лучших чанков
+  4. Генерация ответа через Ollama
 """
 
 import asyncio
@@ -15,11 +15,9 @@ from typing import AsyncGenerator, Optional
 import asyncpg
 import httpx
 
-from embeddings.embed_and_index import NewsIndexer, Reranker
+from embeddings.embed_and_index import NewsIndexer, Reranker, COLLECTION
 from embeddings.remote import embed_query as _remote_embed_query
-from graph.search import global_search, local_search
 from qdrant_client import QdrantClient
-from embeddings.embed_and_index import COLLECTION
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:32b")
@@ -27,10 +25,15 @@ POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-TOP_K = 50   # сколько берём из каждого источника (Qdrant + FTS) до reranker'а
-TOP_N = 10   # сколько отдаём в контекст после reranker'а
-SCORE_THRESHOLD = 0.5  # чанки ниже порога отбрасываются до генерации, нужно будет подкрутить на реальных данных.
-_RRF_K = 60  # константа сглаживания reciprocal rank fusion
+TOP_K = 50
+TOP_N = 10
+SCORE_THRESHOLD = 0.5
+_RRF_K = 60
+
+# HyDE: генерирует гипотетический документ перед поиском.
+# Улучшает recall на сложных вопросах, но добавляет один LLM-вызов.
+# Включать после перехода на быструю модель (MoE/малую).
+USE_HYDE = os.getenv("USE_HYDE", "false").lower() == "true"
 
 SYSTEM_PROMPT = """\
 Ты — аналитик, создающий новостные сводки на русском языке.
@@ -42,17 +45,28 @@ SYSTEM_PROMPT = """\
 - Пиши кратко, структурированно, по-русски.\
 """
 
-# Маркеры для эвристического роутинга
 _GLOBAL_MARKERS = ("тенденци", "обзор", "ситуаци", "в целом", "в общем", "тренд", "динамик")
 _LOCAL_MARKERS = ("кто ", "кто,", "кого", "какой", "назов", "перечисл", "какие компани")
 
+# Sparse BM25 через fastembed (опционально — если не установлен, деградирует на dense+FTS)
+try:
+    from fastembed import SparseTextEmbedding as _SparseModel
+    from qdrant_client.models import (
+        SparseVector as _QSparseVector,
+        Prefetch as _Prefetch,
+        FusionQuery as _FusionQuery,
+        Fusion as _Fusion,
+    )
+    _sparse_encoder = _SparseModel(model_name="Qdrant/bm25")
+    _HAS_SPARSE = True
+except Exception:
+    _HAS_SPARSE = False
+
 
 def _route(query: str) -> str:
-    """Возвращает 'global', 'local' или 'dense'."""
     q = query.lower()
     if any(m in q for m in _GLOBAL_MARKERS) or len(query) > 100:
         return "global"
-    # Собственное имя (заглавная буква не в начале предложения) или явный local-маркер
     if any(m in q for m in _LOCAL_MARKERS) or re.search(r'(?<=[а-яё\s])[А-ЯЁ][а-яё]{2,}', query):
         return "local"
     return "dense"
@@ -94,13 +108,19 @@ def _assemble_context(chunks: list[dict], graph_ctx: Optional[str]) -> str:
 
 
 def _verify_citations(answer: str, num_docs: int) -> list[int]:
-    """Возвращает список невалидных id из ответа модели (галлюцинации)."""
     cited = {int(m) for m in re.findall(r'\[(\d+)]', answer)}
     return [c for c in cited if c < 1 or c > num_docs]
 
 
+def _rrf(*ranked_lists: list[int]) -> list[int]:
+    scores: dict[int, float] = {}
+    for ids in ranked_lists:
+        for rank, cid in enumerate(ids):
+            scores[cid] = scores.get(cid, 0.0) + 1.0 / (_RRF_K + rank)
+    return sorted(scores, key=lambda c: scores[c], reverse=True)
+
+
 async def _fts_search(query: str, limit: int) -> list[int]:
-    """Полнотекстовый поиск по таблице chunk. При ошибке возвращает пустой список."""
     try:
         conn = await asyncpg.connect(POSTGRES_DSN)
         try:
@@ -122,13 +142,30 @@ async def _fts_search(query: str, limit: int) -> list[int]:
         return []
 
 
-def _rrf(qdrant_ids: list[int], fts_ids: list[int]) -> list[int]:
-    scores: dict[int, float] = {}
-    for rank, cid in enumerate(qdrant_ids):
-        scores[cid] = scores.get(cid, 0.0) + 1.0 / (_RRF_K + rank)
-    for rank, cid in enumerate(fts_ids):
-        scores[cid] = scores.get(cid, 0.0) + 1.0 / (_RRF_K + rank)
-    return sorted(scores, key=lambda c: scores[c], reverse=True)
+async def _hyde_vector(query: str) -> Optional[list[float]]:
+    """HyDE: генерирует гипотетический фрагмент статьи → эмбеддинг для поиска."""
+    try:
+        prompt = (
+            f"Напиши короткий фрагмент новостной статьи, который отвечает на вопрос: {query}\n"
+            "Только текст фрагмента, без объяснений."
+        )
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{OLLAMA_URL}/api/chat",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                    "think": False,
+                },
+            )
+            resp.raise_for_status()
+        content = resp.json()["message"]["content"]
+        if "</think>" in content:
+            content = content[content.index("</think>") + 8:].strip()
+        return await _remote_embed_query(content)
+    except Exception:
+        return None
 
 
 async def _generate(context: str, query: str) -> str:
@@ -144,13 +181,12 @@ async def _generate(context: str, query: str) -> str:
                         {"role": "user", "content": user_msg},
                     ],
                     "stream": False,
-                    #"think": False,
                 },
             )
             resp.raise_for_status()
             return resp.json()["message"]["content"]
     except Exception:
-        return f"[Ollama недоступен] Найдено {context.count('<doc')} релевантных фрагментов. Настройте OLLAMA_URL для генерации ответа."
+        return f"[Ollama недоступен] Найдено {context.count('<doc')} релевантных фрагментов."
 
 
 async def _generate_stream(context: str, query: str) -> AsyncGenerator[str, None]:
@@ -193,101 +229,101 @@ class RAGChain:
         self._reranker = Reranker()
 
     async def _search(self, query: str, top_k: int) -> list[tuple[int, float]]:
-        if self._use_remote_embed:
-            vector = await _remote_embed_query(query)
-            qdrant_results, fts_ids = await asyncio.gather(
-                asyncio.to_thread(
-                    self._qdrant.query_points,
-                    collection_name=COLLECTION,
-                    query=vector,
-                    limit=top_k,
-                ),
-                _fts_search(query, top_k),
+        if not self._use_remote_embed:
+            return self._indexer.search(query, top_k=top_k)
+
+        # Параллельно: вектор запроса + FTS + (HyDE если включён)
+        gather_tasks: list = [_remote_embed_query(query), _fts_search(query, top_k)]
+        if USE_HYDE:
+            gather_tasks.append(_hyde_vector(query))
+
+        step1 = await asyncio.gather(*gather_tasks)
+        query_vec: list[float] = step1[0]
+        fts_ids: list[int] = step1[1]
+        hyde_vec: Optional[list[float]] = step1[2] if USE_HYDE else None
+
+        # Sparse BM25 вектор запроса (синхронный, быстрый)
+        sparse_q = None
+        if _HAS_SPARSE:
+            sq = list(_sparse_encoder.query_embed(query))[0]
+            sparse_q = _QSparseVector(
+                indices=sq.indices.tolist(),
+                values=sq.values.tolist(),
             )
-            qdrant_scored = {r.id: r.score for r in qdrant_results.points}
-            merged = _rrf(list(qdrant_scored), fts_ids)[:top_k]
-            # FTS-only чанки получают score = SCORE_THRESHOLD чтобы пройти фильтр;
-            # reranker потом расставит их по релевантности.
-            return [(cid, qdrant_scored.get(cid, SCORE_THRESHOLD)) for cid in merged]
-        return self._indexer.search(query, top_k=top_k)
+
+        # Qdrant: dense + sparse через встроенный RRF если есть sparse
+        if _HAS_SPARSE and sparse_q is not None:
+            qdrant_results = await asyncio.to_thread(
+                self._qdrant.query_points,
+                collection_name=COLLECTION,
+                prefetch=[
+                    _Prefetch(query=query_vec, limit=top_k),
+                    _Prefetch(query=sparse_q, using="bm25", limit=top_k),
+                ],
+                query=_FusionQuery(fusion=_Fusion.RRF),
+                limit=top_k,
+            )
+        else:
+            qdrant_results = await asyncio.to_thread(
+                self._qdrant.query_points,
+                collection_name=COLLECTION,
+                query=query_vec,
+                limit=top_k,
+            )
+
+        qdrant_scored = {r.id: r.score for r in qdrant_results.points}
+        qdrant_ids = list(qdrant_scored)
+
+        # HyDE: дополнительный поиск по гипотетическому документу
+        if hyde_vec:
+            hyde_results = await asyncio.to_thread(
+                self._qdrant.query_points,
+                collection_name=COLLECTION,
+                query=hyde_vec,
+                limit=top_k,
+            )
+            hyde_ids = [r.id for r in hyde_results.points]
+            hyde_scored = {r.id: r.score for r in hyde_results.points}
+            merged = _rrf(qdrant_ids, hyde_ids, fts_ids)[:top_k]
+            all_scored = {**hyde_scored, **qdrant_scored}
+        else:
+            merged = _rrf(qdrant_ids, fts_ids)[:top_k]
+            all_scored = qdrant_scored
+
+        return [(cid, all_scored.get(cid, SCORE_THRESHOLD)) for cid in merged]
 
     async def stream_answer(self, query: str, top_k: int = TOP_K) -> AsyncGenerator[str, None]:
-        route = _route(query)
         results = await self._search(query, top_k=top_k)
         chunk_ids = [cid for cid, score in results if score >= SCORE_THRESHOLD]
 
-        if not chunk_ids and route == "dense":
+        if not chunk_ids:
             yield "Недостаточно данных в базе знаний."
             return
 
-        if route == "global":
-            try:
-                chunks, graph_ctx = await asyncio.gather(
-                    _fetch_chunks(chunk_ids), global_search(query)
-                )
-            except Exception:
-                chunks = await _fetch_chunks(chunk_ids)
-                graph_ctx = None
-        elif route == "local":
-            try:
-                chunks, graph_ctx = await asyncio.gather(
-                    _fetch_chunks(chunk_ids), local_search(query)
-                )
-            except Exception:
-                chunks = await _fetch_chunks(chunk_ids)
-                graph_ctx = None
-        else:
-            chunks = await _fetch_chunks(chunk_ids)
-            graph_ctx = None
-
-        if not chunks and not graph_ctx:
+        chunks = await _fetch_chunks(chunk_ids)
+        if not chunks:
             yield "Недостаточно данных в базе знаний."
             return
 
         chunks = self._reranker.rerank(query, chunks, top_n=TOP_N)
-        context = _assemble_context(chunks, graph_ctx)
+        context = _assemble_context(chunks, None)
 
         async for token in _generate_stream(context, query):
             yield token
 
     async def answer(self, query: str, top_k: int = TOP_K) -> str:
-        route = _route(query)
-
-        # Векторный поиск всегда; фильтруем по порогу до обращения в Postgres
         results = await self._search(query, top_k=top_k)
         chunk_ids = [cid for cid, score in results if score >= SCORE_THRESHOLD]
 
-        if not chunk_ids and route == "dense":
+        if not chunk_ids:
             return "Недостаточно данных в базе знаний."
 
-        if route == "global":
-            try:
-                chunks, graph_ctx = await asyncio.gather(
-                    _fetch_chunks(chunk_ids),
-                    global_search(query),
-                )
-            except Exception:
-                chunks = await _fetch_chunks(chunk_ids)
-                graph_ctx = None
-        elif route == "local":
-            try:
-                chunks, graph_ctx = await asyncio.gather(
-                    _fetch_chunks(chunk_ids),
-                    local_search(query),
-                )
-            except Exception:
-                chunks = await _fetch_chunks(chunk_ids)
-                graph_ctx = None
-        else:
-            chunks = await _fetch_chunks(chunk_ids)
-            graph_ctx = None
-
-        if not chunks and not graph_ctx:
+        chunks = await _fetch_chunks(chunk_ids)
+        if not chunks:
             return "Недостаточно данных в базе знаний."
 
         chunks = self._reranker.rerank(query, chunks, top_n=TOP_N)
-
-        context = _assemble_context(chunks, graph_ctx)
+        context = _assemble_context(chunks, None)
         answer = await _generate(context, query)
 
         invalid = _verify_citations(answer, num_docs=len(chunks))
