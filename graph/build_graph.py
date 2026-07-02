@@ -26,6 +26,7 @@ _ragu_ext.RaguLmArtifactExtractor._run = _patched_run
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:32b")
 RAGU_LM_MODEL = os.getenv("RAGU_LM_MODEL", "ragu-lm")
+RAGU_LM_PARALLEL = int(os.getenv("RAGU_LM_PARALLEL", "10"))
 
 Settings.storage_folder = os.getenv("GRAPH_WORKING_DIR", "./ragu_working_dir")
 Settings.language = "russian"
@@ -55,19 +56,19 @@ def _init() -> None:
         batch_size=64,
     )
     ragu_lm = LLMOpenAI(
-        client=_client(rate_max_simultaneous=1),
+        client=_client(rate_max_simultaneous=RAGU_LM_PARALLEL),
         model_name=RAGU_LM_MODEL,
     )
     _knowledge_graph = KnowledgeGraph(
         llm=_llm,
         embedder=_embedder,
-        chunker=SimpleChunker(max_chunk_size=800, overlap=120), # можно исправить
-        artifact_extractor=RaguLmArtifactExtractor(llm=ragu_lm, temperature=0.0), # тут тоже можно потестировать
+        chunker=SimpleChunker(max_chunk_size=800, overlap=120),
+        artifact_extractor=RaguLmArtifactExtractor(llm=ragu_lm, temperature=0.0),
         builder_settings=BuilderArguments(
-            use_llm_summarization=True, # информацию объединяет в один ответ
-            use_clustering=True, # группирует сущности в сообщества
-            make_community_summary=True, # пишет сводку по каждому сообществу
-            remove_isolated_nodes=True, # удаляет сущности без связей, чистит граф
+            use_llm_summarization=True,
+            use_clustering=True,
+            make_community_summary=True,
+            remove_isolated_nodes=True,
         ),
     )
 
@@ -88,25 +89,50 @@ def get_embedder() -> EmbedderOpenAI:
 
 
 async def insert_articles(texts: list[str]) -> None:
-    """Загружает полные тексты статей в граф. Повторный вызов безопасен - дубли пропускаются."""
+    """Загружает полные тексты статей в граф. Повторный вызов безопасен — дубли пропускаются."""
     await get_knowledge_graph().build_from_docs(texts)
 
 
+async def _fetch_articles(conn, *, limit: Optional[int] = None, days: Optional[int] = None) -> list[str]:
+    if days:
+        rows = await conn.fetch(
+            """
+            SELECT title, arttext FROM article
+            WHERE createdate > NOW() - ($1 || ' days')::interval
+            ORDER BY createdate DESC
+            """,
+            str(days),
+        )
+    elif limit:
+        rows = await conn.fetch(
+            "SELECT title, arttext FROM article ORDER BY createdate DESC LIMIT $1",
+            limit,
+        )
+    else:
+        rows = await conn.fetch(
+            "SELECT title, arttext FROM article ORDER BY createdate DESC"
+        )
+    return [f"{r['title']}\n\n{r['arttext']}" for r in rows]
+
+
 # CLI: python -m graph.build_graph
+# Начальный прогон 50к:  GRAPH_LIMIT=50000 python -m graph.build_graph
+# Ежедневный апдейт:     GRAPH_DAYS=2 python -m graph.build_graph
 async def _build_from_postgres() -> None:
     import asyncpg
 
     dsn = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5432/mydb")
+    limit = int(os.getenv("GRAPH_LIMIT", "0")) or None
+    days = int(os.getenv("GRAPH_DAYS", "0")) or None
+
     conn = await asyncpg.connect(dsn)
     try:
-        rows = await conn.fetch(
-            "SELECT title, arttext FROM article ORDER BY createdate DESC"
-        )
+        texts = await _fetch_articles(conn, limit=limit, days=days)
     finally:
         await conn.close()
 
-    texts = [f"{r['title']}\n\n{r['arttext']}" for r in rows]
-    print(f"Загружаем {len(texts)} статей в граф...")
+    label = f"последних {days} дней" if days else (f"топ-{limit}" if limit else "всех")
+    print(f"Загружаем {len(texts)} статей ({label}) в граф...")
     await insert_articles(texts)
     print("Готово.")
 
