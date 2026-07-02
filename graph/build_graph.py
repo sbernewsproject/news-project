@@ -96,17 +96,11 @@ async def insert_articles(texts: list[str]) -> None:
 async def _fetch_articles(conn, *, limit: Optional[int] = None, days: Optional[int] = None) -> list[str]:
     if days:
         rows = await conn.fetch(
-            """
-            SELECT title, arttext FROM article
-            WHERE createdate > NOW() - ($1 || ' days')::interval
-            ORDER BY createdate DESC
-            """,
-            str(days),
+            f"SELECT title, arttext FROM article WHERE createdate > NOW() - INTERVAL '{days} days' ORDER BY createdate DESC"
         )
     elif limit:
         rows = await conn.fetch(
-            "SELECT title, arttext FROM article ORDER BY createdate DESC LIMIT $1",
-            limit,
+            f"SELECT title, arttext FROM article ORDER BY createdate DESC LIMIT {limit}"
         )
     else:
         rows = await conn.fetch(
