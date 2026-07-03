@@ -25,7 +25,7 @@ POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-TOP_K = 30
+TOP_K = 15
 TOP_N = 7
 SCORE_THRESHOLD = 0.5
 _RRF_K = 60
@@ -112,8 +112,8 @@ async def _fts_search(query: str, limit: int) -> list[int]:
                 """
                 SELECT chunk_id
                 FROM chunk
-                WHERE tsv @@ websearch_to_tsquery('russian', $1)
-                ORDER BY ts_rank(tsv, websearch_to_tsquery('russian', $1)) DESC
+                WHERE to_tsvector('russian', coalesce(chunk_text, '')) @@ websearch_to_tsquery('russian', $1)
+                ORDER BY ts_rank(to_tsvector('russian', coalesce(chunk_text, '')), websearch_to_tsquery('russian', $1)) DESC
                 LIMIT $2
                 """,
                 query,
