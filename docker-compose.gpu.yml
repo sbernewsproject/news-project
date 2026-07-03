@@ -19,9 +19,8 @@ services:
       QDRANT_API_KEY: ${QDRANT_API_KEY:-password}
       # Локальный Ollama на GPU-хосте:
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:32b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:30b-a3b}
       OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-bge-m3}
-      GRAPH_WORKING_DIR: /app/ragu_working_dir
     volumes:
       # Кэш скачанных моделей HuggingFace, чтобы не качать при каждом старте.
       - hf-cache:/root/.cache/huggingface

@@ -45,14 +45,6 @@ BGE_MODEL_PATH=$HOME/models/bge-m3 \
 PYTHONPATH=. \
 $VENV scripts/run_indexing.py
 
-echo ""
-echo ">>> Инкрементальное обновление графа знаний (статьи за последние 2 дня)..."
-OLLAMA_URL=${OLLAMA_URL:-http://localhost:11436} \
-POSTGRES_DSN=postgresql://user:password@localhost:5432/mydb \
-GRAPH_WORKING_DIR=${GRAPH_WORKING_DIR:-./ragu_working_dir} \
-GRAPH_DAYS=2 \
-PYTHONPATH=. \
-$VENV -m graph.build_graph
 
 echo ""
 echo "=============================="

@@ -88,15 +88,6 @@ async def query_stream(req: QueryRequest):
     raise HTTPException(status_code=501, detail="RAG_URL не настроен")
 
 
-@app.post("/index/article")
-async def index_article(payload: dict) -> dict:
-    # Быстрый эндпоинт для добавления одной статьи в граф (нужны graph-зависимости).
-    # Тело: {"title": "...", "content": "..."}
-    from graph.build_graph import insert_articles
-    text = f"{payload.get('title', '')}\n\n{payload.get('content', '')}"
-    await insert_articles([text])
-    return {"status": "ok"}
-
 
 @app.get("/health")
 async def health() -> dict:

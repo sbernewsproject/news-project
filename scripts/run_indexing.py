@@ -1,6 +1,5 @@
 import asyncio
 import json
-import math
 import os
 import sys
 
@@ -12,30 +11,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from embeddings.chunker import Article, chunk_article
 from embeddings.embed_and_index import COLLECTION, VECTOR_SIZE, IndexableChunk
+from embeddings.remote import batch_embed_text
 
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5432/mydb")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 OLLAMA_URL = os.getenv("OLLAMA_URL")
-OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "bge-m3")
 
 ARTICLE_BATCH = 200
-
-
-def _l2_normalize(vec: list[float]) -> list[float]:
-    norm = math.sqrt(sum(x * x for x in vec))
-    return [x / norm for x in vec] if norm > 0 else vec
-
-
-def _make_embedder():
-    from ragu.models.embedder import EmbedderOpenAI
-    from ragu.models.openai import CachedAsyncOpenAI
-    client = CachedAsyncOpenAI(
-        base_url=f"{OLLAMA_URL}/v1",
-        api_key="ollama",
-        rate_max_simultaneous=5,
-    )
-    return EmbedderOpenAI(client=client, model_name=OLLAMA_EMBED_MODEL, dim=1024, batch_size=32)
 
 
 def _ensure_collection(qdrant: QdrantClient) -> None:
@@ -45,14 +28,6 @@ def _ensure_collection(qdrant: QdrantClient) -> None:
             collection_name=COLLECTION,
             vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.DOT),
         )
-    try:
-        from qdrant_client.models import SparseVectorParams, SparseIndexParams
-        qdrant.update_collection(
-            collection_name=COLLECTION,
-            sparse_vectors_config={"bm25": SparseVectorParams(index=SparseIndexParams(on_disk=False))},
-        )
-    except Exception:
-        pass
 
 
 async def insert_chunks(conn, chunks) -> list[int]:
@@ -78,7 +53,6 @@ async def main() -> None:
 
     if use_remote:
         print(f"Режим: удалённый эмбедер через Ollama ({OLLAMA_URL})")
-        embedder = _make_embedder()
         qdrant = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=120)
         _ensure_collection(qdrant)
     else:
@@ -131,31 +105,11 @@ async def main() -> None:
 
             if use_remote:
                 prefixed = [f"passage: {c.chunk_text}" for c in indexable]
-                vectors = await embedder.batch_embed_text(prefixed)
-                vectors = [_l2_normalize(v) for v in vectors]
-
-                try:
-                    from fastembed import SparseTextEmbedding
-                    from qdrant_client.models import SparseVector
-                    _enc = SparseTextEmbedding(model_name="Qdrant/bm25")
-                    sparse_vecs = list(_enc.embed([c.chunk_text for c in indexable]))
-                    points = [
-                        PointStruct(
-                            id=c.chunk_id,
-                            vector={
-                                "": v,
-                                "bm25": SparseVector(indices=sv.indices.tolist(), values=sv.values.tolist()),
-                            },
-                            payload=c.payload,
-                        )
-                        for c, v, sv in zip(indexable, vectors, sparse_vecs)
-                    ]
-                except Exception:
-                    points = [
-                        PointStruct(id=c.chunk_id, vector=v, payload=c.payload)
-                        for c, v in zip(indexable, vectors)
-                    ]
-
+                vectors = await batch_embed_text(prefixed)
+                points = [
+                    PointStruct(id=c.chunk_id, vector=v, payload=c.payload)
+                    for c, v in zip(indexable, vectors)
+                ]
                 qdrant.upsert(collection_name=COLLECTION, points=points)
             else:
                 indexer.index(indexable)

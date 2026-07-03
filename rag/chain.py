@@ -20,7 +20,7 @@ from embeddings.remote import embed_query as _remote_embed_query
 from qdrant_client import QdrantClient
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:32b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:30b-a3b")
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5432/mydb")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
@@ -47,20 +47,6 @@ SYSTEM_PROMPT = """\
 
 _GLOBAL_MARKERS = ("тенденци", "обзор", "ситуаци", "в целом", "в общем", "тренд", "динамик")
 _LOCAL_MARKERS = ("кто ", "кто,", "кого", "какой", "назов", "перечисл", "какие компани")
-
-# Sparse BM25 через fastembed (опционально — если не установлен, деградирует на dense+FTS)
-try:
-    from fastembed import SparseTextEmbedding as _SparseModel
-    from qdrant_client.models import (
-        SparseVector as _QSparseVector,
-        Prefetch as _Prefetch,
-        FusionQuery as _FusionQuery,
-        Fusion as _Fusion,
-    )
-    _sparse_encoder = _SparseModel(model_name="Qdrant/bm25")
-    _HAS_SPARSE = True
-except Exception:
-    _HAS_SPARSE = False
 
 
 def _route(query: str) -> str:
@@ -94,7 +80,7 @@ async def _fetch_chunks(chunk_ids: list[int]) -> list[dict]:
         await conn.close()
 
 
-def _assemble_context(chunks: list[dict], graph_ctx: Optional[str]) -> str:
+def _assemble_context(chunks: list[dict]) -> str:
     parts = []
     for i, c in enumerate(chunks, 1):
         date_str = str(c.get("published_at", ""))[:10]
@@ -102,8 +88,6 @@ def _assemble_context(chunks: list[dict], graph_ctx: Optional[str]) -> str:
             f'<doc id="{i}" source="{c["source"]}" date="{date_str}">\n'
             f'{c["text"]}\n</doc>'
         )
-    if graph_ctx:
-        parts.append(f"\n<graph_context>\n{graph_ctx}\n</graph_context>")
     return "\n\n".join(parts)
 
 
@@ -242,34 +226,13 @@ class RAGChain:
         fts_ids: list[int] = step1[1]
         hyde_vec: Optional[list[float]] = step1[2] if USE_HYDE else None
 
-        # Sparse BM25 вектор запроса (синхронный, быстрый)
-        sparse_q = None
-        if _HAS_SPARSE:
-            sq = list(_sparse_encoder.query_embed(query))[0]
-            sparse_q = _QSparseVector(
-                indices=sq.indices.tolist(),
-                values=sq.values.tolist(),
-            )
-
-        # Qdrant: dense + sparse через встроенный RRF если есть sparse
-        if _HAS_SPARSE and sparse_q is not None:
-            qdrant_results = await asyncio.to_thread(
-                self._qdrant.query_points,
-                collection_name=COLLECTION,
-                prefetch=[
-                    _Prefetch(query=query_vec, limit=top_k),
-                    _Prefetch(query=sparse_q, using="bm25", limit=top_k),
-                ],
-                query=_FusionQuery(fusion=_Fusion.RRF),
-                limit=top_k,
-            )
-        else:
-            qdrant_results = await asyncio.to_thread(
-                self._qdrant.query_points,
-                collection_name=COLLECTION,
-                query=query_vec,
-                limit=top_k,
-            )
+        # Qdrant: dense-поиск
+        qdrant_results = await asyncio.to_thread(
+            self._qdrant.query_points,
+            collection_name=COLLECTION,
+            query=query_vec,
+            limit=top_k,
+        )
 
         qdrant_scored = {r.id: r.score for r in qdrant_results.points}
         qdrant_ids = list(qdrant_scored)
@@ -306,7 +269,7 @@ class RAGChain:
             return
 
         chunks = self._reranker.rerank(query, chunks, top_n=TOP_N)
-        context = _assemble_context(chunks, None)
+        context = _assemble_context(chunks)
 
         async for token in _generate_stream(context, query):
             yield token
@@ -323,7 +286,7 @@ class RAGChain:
             return "Недостаточно данных в базе знаний."
 
         chunks = self._reranker.rerank(query, chunks, top_n=TOP_N)
-        context = _assemble_context(chunks, None)
+        context = _assemble_context(chunks)
         answer = await _generate(context, query)
 
         invalid = _verify_citations(answer, num_docs=len(chunks))

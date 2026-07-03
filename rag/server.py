@@ -68,14 +68,6 @@ async def query_stream(req: QueryRequest):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
-@app.post("/index/article")
-async def index_article(payload: dict) -> dict:
-    # Тело: {"title": "...", "content": "..."}
-    from graph.build_graph import insert_articles
-    text = f"{payload.get('title', '')}\n\n{payload.get('content', '')}"
-    await insert_articles([text])
-    return {"status": "ok"}
-
 
 @app.get("/health")
 async def health() -> dict:
