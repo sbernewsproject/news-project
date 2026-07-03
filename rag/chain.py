@@ -25,8 +25,8 @@ POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-TOP_K = 50
-TOP_N = 10
+TOP_K = 30
+TOP_N = 7
 SCORE_THRESHOLD = 0.5
 _RRF_K = 60
 
@@ -187,6 +187,7 @@ async def _generate_stream(context: str, query: str) -> AsyncGenerator[str, None
                         {"role": "user", "content": user_msg},
                     ],
                     "stream": True,
+                    "think": False,
                 },
             ) as resp:
                 resp.raise_for_status()
