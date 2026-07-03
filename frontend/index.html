@@ -1742,15 +1742,14 @@ function showTyping() {
 
             // Случай 2: токен есть, накапливаем
             rawContent += token;
-            if (thinkEndIdx === -1) {
-              thinkEndIdx = rawContent.indexOf('</think>');
-            }
 
-            // Пока мы внутри <think>...</think> — сервер думает
-            const isThinking = thinkEndIdx === -1 && rawContent.trimStart().startsWith('<think>');
+            // Убираем все <think>...</think> блоки (полные)
+            const display = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '').trimStart();
 
-            if (isThinking) {
-              // Показываем индикатор, если его ещё нет
+            // Если </think> ещё не пришёл и контент начинается с <think> — думаем
+            const insideThink = rawContent.trimStart().startsWith('<think>') && !rawContent.includes('</think>');
+
+            if (insideThink) {
               if (!thinkingShown) {
                 showTyping();
                 thinkingShown = true;
@@ -1758,20 +1757,18 @@ function showTyping() {
               continue;
             }
 
-            // Случай 3: пришёл реальный контент (после </think> или без него)
-            // Убираем индикатор "Думаю" и создаём/обновляем msgDiv
+            // Случай 3: реальный контент (после </think> или без него)
             if (thinkingShown) {
               removeTyping();
               thinkingShown = false;
             }
 
+            if (!display) continue;
+
             if (!msgDiv) {
               msgDiv = appendMessage('ai', '');
             }
 
-            const display = thinkEndIdx !== -1
-              ? rawContent.slice(thinkEndIdx + 8).trimStart()
-              : rawContent;
             msgDiv.textContent = display;
             msgs.scrollTop = msgs.scrollHeight;
 
