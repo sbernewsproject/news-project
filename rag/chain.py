@@ -25,8 +25,8 @@ POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-TOP_K = 15
-TOP_N = 7
+TOP_K = 10
+TOP_N = 5
 SCORE_THRESHOLD = 0.5
 _RRF_K = 60
 
