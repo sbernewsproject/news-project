@@ -1666,11 +1666,11 @@ function showTyping() {
 
     isTyping = true;
     document.getElementById('aiSendBtn').disabled = true;
-    // НЕ вызываем showTyping() здесь — покажем только когда сервер начнёт "думать"
+    showTyping();
 
     const msgs = document.getElementById('aiMessages');
     let msgDiv = null;              // создадим только когда придёт реальный контент
-    let thinkingShown = false;      // флаг: показан ли сейчас индикатор "Думаю"
+    let thinkingShown = true;       // индикатор уже показан
 
     try {
       const article = articlesById[currentArticleId];
@@ -1712,6 +1712,20 @@ function showTyping() {
               removeTyping();
               appendMessage('ai', 'Ошибка: ' + parsed.error);
               break outer;
+            }
+
+            // === СТАТУСЫ ПАЙПЛАЙНА ===
+            if (parsed.status) {
+              const textEl = document.querySelector('#typingIndicator .typing-text');
+              if (textEl) {
+                clearInterval(typingInterval);
+                typingInterval = null;
+                textEl.textContent = parsed.status;
+              } else if (!thinkingShown) {
+                showTyping();
+                thinkingShown = true;
+              }
+              continue;
             }
 
             // === ЛОГИКА "ДУМАЮ" ===

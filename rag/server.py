@@ -60,8 +60,12 @@ async def query(req: QueryRequest) -> QueryResponse:
 async def query_stream(req: QueryRequest):
     async def gen():
         try:
-            async for token in _chain.stream_answer(req.query, top_k=req.top_k):
-                yield f"data: {_json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+            async for chunk in _chain.stream_answer(req.query, top_k=req.top_k):
+                if chunk.startswith('\x00') and chunk.endswith('\x00'):
+                    payload = {'status': chunk[1:-1]}
+                else:
+                    payload = {'token': chunk}
+                yield f"data: {_json.dumps(payload, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {_json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"

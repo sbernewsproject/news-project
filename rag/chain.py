@@ -256,6 +256,7 @@ class RAGChain:
         return [(cid, all_scored.get(cid, SCORE_THRESHOLD)) for cid in merged]
 
     async def stream_answer(self, query: str, top_k: int = TOP_K) -> AsyncGenerator[str, None]:
+        yield "\x00ищу статьи\x00"
         results = await self._search(query, top_k=top_k)
         chunk_ids = [cid for cid, score in results if score >= SCORE_THRESHOLD]
 
@@ -263,14 +264,17 @@ class RAGChain:
             yield "Недостаточно данных в базе знаний."
             return
 
+        yield "\x00загружаю контекст\x00"
         chunks = await _fetch_chunks(chunk_ids)
         if not chunks:
             yield "Недостаточно данных в базе знаний."
             return
 
+        yield "\x00ранжирую результаты\x00"
         chunks = self._reranker.rerank(query, chunks, top_n=TOP_N)
         context = _assemble_context(chunks)
 
+        yield "\x00формирую ответ\x00"
         async for token in _generate_stream(context, query):
             yield token
 
