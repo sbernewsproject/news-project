@@ -1743,21 +1743,22 @@ function showTyping() {
             // Случай 2: токен есть, накапливаем
             rawContent += token;
 
-            // Убираем все <think>...</think> блоки (полные)
-            const display = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '').trimStart();
+            const hasClose = rawContent.includes('</think>');
 
-            // Если </think> ещё не пришёл и контент начинается с <think> — думаем
-            const insideThink = rawContent.trimStart().startsWith('<think>') && !rawContent.includes('</think>');
-
-            if (insideThink) {
-              if (!thinkingShown) {
-                showTyping();
-                thinkingShown = true;
-              }
+            // Вычисляем отображаемый контент
+            let display;
+            if (hasClose) {
+              // Убираем всё до </think> включительно (с или без открывающего тега)
+              display = rawContent.replace(/<think>[\s\S]*?<\/think>/, '')  // полный блок
+                                  .replace(/[\s\S]*?<\/think>/, '')          // без открывающего тега
+                                  .trimStart();
+            } else {
+              // </think> ещё не пришёл — скрываем всё (thinking in progress)
+              if (!thinkingShown) { showTyping(); thinkingShown = true; }
               continue;
             }
 
-            // Случай 3: реальный контент (после </think> или без него)
+            // Случай 3: реальный контент после </think>
             if (thinkingShown) {
               removeTyping();
               thinkingShown = false;
