@@ -61,7 +61,9 @@ async def query_stream(req: QueryRequest):
     async def gen():
         try:
             async for chunk in _chain.stream_answer(req.query, top_k=req.top_k):
-                if chunk.startswith('\x00') and chunk.endswith('\x00'):
+                if chunk.startswith('\x01') and chunk.endswith('\x01'):
+                    payload = _json.loads(chunk[1:-1])
+                elif chunk.startswith('\x00') and chunk.endswith('\x00'):
                     payload = {'status': chunk[1:-1]}
                 else:
                     payload = {'token': chunk}

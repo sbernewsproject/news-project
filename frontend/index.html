@@ -1608,6 +1608,19 @@
     fab.style.display = isOpen ? 'none' : '';
   }
 
+  function renderWithCitations(text, sources) {
+    const escaped = text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+    return escaped.replace(/\[(\d+)\]/g, (match, num) => {
+      const s = sources[parseInt(num)];
+      if (s && s.url && s.url.startsWith('http')) {
+        return `<a href="${s.url}" target="_blank" rel="noopener">[${num}]</a>`;
+      }
+      return match;
+    });
+  }
+
   function appendMessage(role, text) {
     const msgs = document.getElementById('aiMessages');
     const div = document.createElement('div');
@@ -1671,6 +1684,7 @@ function showTyping() {
     const msgs = document.getElementById('aiMessages');
     let msgDiv = null;              // создадим только когда придёт реальный контент
     let thinkingShown = true;       // индикатор уже показан
+    let sourcesMap = {};            // id → {url, date}
 
     try {
       const article = articlesById[currentArticleId];
@@ -1712,6 +1726,13 @@ function showTyping() {
               removeTyping();
               appendMessage('ai', 'Ошибка: ' + parsed.error);
               break outer;
+            }
+
+            // === ИСТОЧНИКИ ===
+            if (parsed.sources) {
+              sourcesMap = {};
+              parsed.sources.forEach(s => { sourcesMap[s.id] = s; });
+              continue;
             }
 
             // === СТАТУСЫ ПАЙПЛАЙНА ===
@@ -1770,7 +1791,7 @@ function showTyping() {
               msgDiv = appendMessage('ai', '');
             }
 
-            msgDiv.textContent = display;
+            msgDiv.innerHTML = renderWithCitations(display, sourcesMap);
             msgs.scrollTop = msgs.scrollHeight;
 
           } catch { /* skip malformed line */ }

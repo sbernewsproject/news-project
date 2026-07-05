@@ -25,7 +25,7 @@ POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:password@localhost:5
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-TOP_K = 10
+TOP_K = 15
 TOP_N = 5
 SCORE_THRESHOLD = 0.5
 _RRF_K = 60
@@ -41,7 +41,7 @@ SYSTEM_PROMPT = """\
 - Используй ТОЛЬКО информацию из предоставленного контекста.
 - Не придумывай факты, цифры, имена.
 - Ссылайся на источники в формате [id] — число соответствует id тега <doc>.
-- Если в контексте недостаточно данных, ответь: "Недостаточно данных в базе знаний."
+- Если в контексте недостаточно данных, кратко объясни что именно не найдено — без домыслов.
 - Пиши кратко, структурированно, по-русски.\
 """
 
@@ -113,7 +113,6 @@ async def _fts_search(query: str, limit: int) -> list[int]:
                 SELECT chunk_id
                 FROM chunk
                 WHERE to_tsvector('russian', coalesce(chunk_text, '')) @@ websearch_to_tsquery('russian', $1)
-                ORDER BY ts_rank(to_tsvector('russian', coalesce(chunk_text, '')), websearch_to_tsquery('russian', $1)) DESC
                 LIMIT $2
                 """,
                 query,
@@ -274,6 +273,12 @@ class RAGChain:
         yield "\x00ранжирую результаты\x00"
         chunks = self._reranker.rerank(query, chunks, top_n=TOP_N)
         context = _assemble_context(chunks)
+
+        sources = [
+            {"id": i + 1, "url": c.get("source", ""), "date": str(c.get("published_at", ""))[:10]}
+            for i, c in enumerate(chunks)
+        ]
+        yield f"\x01{_json.dumps({'sources': sources}, ensure_ascii=False)}\x01"
 
         yield "\x00формирую ответ\x00"
         async for token in _generate_stream(context, query):
