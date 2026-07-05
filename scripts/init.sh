@@ -4,16 +4,17 @@
 # данные лежат в persistent volume pgdata (см. docker-compose.yml).
 set -e
 
-DUMP_FILE="/dumps/latest.sql"
-
-if [ -f "$DUMP_FILE" ]; then
-  echo ">>> restore from $DUMP_FILE..."
-  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$DUMP_FILE"
+if [ -f "/dumps/latest.sql.gz" ]; then
+  echo ">>> restore from latest.sql.gz..."
+  zcat /dumps/latest.sql.gz | psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+elif [ -f "/dumps/latest.sql" ]; then
+  echo ">>> restore from latest.sql..."
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /dumps/latest.sql
 else
   echo ">>> dump not found — start with empty schema"
 fi
 
-echo ">>> apply migrations (FTS)..."
+echo ">>> apply migrations..."
 for m in /migrations/*.sql; do
   [ -f "$m" ] && echo ">>>   $m" && psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$m"
 done

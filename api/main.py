@@ -5,7 +5,7 @@ from typing import Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -76,14 +76,17 @@ async def query(req: QueryRequest) -> QueryResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/index/article")
-async def index_article(payload: dict) -> dict:
-    # Быстрый эндпоинт для добавления одной статьи в граф (нужны graph-зависимости).
-    # Тело: {"title": "...", "content": "..."}
-    from graph.build_graph import insert_articles
-    text = f"{payload.get('title', '')}\n\n{payload.get('content', '')}"
-    await insert_articles([text])
-    return {"status": "ok"}
+@app.post("/query/stream")
+async def query_stream(req: QueryRequest):
+    if RAG_URL:
+        async def proxy():
+            async with httpx.AsyncClient(timeout=180) as client:
+                async with client.stream("POST", f"{RAG_URL}/query/stream", json=req.model_dump()) as resp:
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+        return StreamingResponse(proxy(), media_type="text/event-stream")
+    raise HTTPException(status_code=501, detail="RAG_URL не настроен")
+
 
 
 @app.get("/health")

@@ -9,11 +9,14 @@ VPS (api/main.py) проксирует сюда POST /query. Postgres и Qdrant 
 Запуск: uvicorn rag.server:app --host 0.0.0.0 --port 8001
 """
 
+
+import json as _json
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 _chain = None  # RAGChain, поднимается один раз на старте (загрузка моделей)
@@ -22,12 +25,14 @@ _chain = None  # RAGChain, поднимается один раз на стар�
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _chain
-    from rag.chain import RAGChain
+    from rag.chain import RAGChain, init_pool, close_pool
+    await init_pool()
     _chain = RAGChain(
         qdrant_url=os.getenv("QDRANT_URL", "http://localhost:6333"),
         api_key=os.getenv("QDRANT_API_KEY"),
     )
     yield
+    await close_pool()
 
 
 app = FastAPI(title="news-rag", version="0.1.0", lifespan=lifespan)
@@ -53,13 +58,23 @@ async def query(req: QueryRequest) -> QueryResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/index/article")
-async def index_article(payload: dict) -> dict:
-    # Тело: {"title": "...", "content": "..."}
-    from graph.build_graph import insert_articles
-    text = f"{payload.get('title', '')}\n\n{payload.get('content', '')}"
-    await insert_articles([text])
-    return {"status": "ok"}
+@app.post("/query/stream")
+async def query_stream(req: QueryRequest):
+    async def gen():
+        try:
+            async for chunk in _chain.stream_answer(req.query, top_k=req.top_k):
+                if chunk.startswith('\x01') and chunk.endswith('\x01'):
+                    payload = _json.loads(chunk[1:-1])
+                elif chunk.startswith('\x00') and chunk.endswith('\x00'):
+                    payload = {'status': chunk[1:-1]}
+                else:
+                    payload = {'token': chunk}
+                yield f"data: {_json.dumps(payload, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {_json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
 
 
 @app.get("/health")

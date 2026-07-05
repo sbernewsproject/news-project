@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
   <title>Актуальные новости</title>
+  <link rel="icon" type="image/x-icon" href="/static/favicon_io/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon_io/apple-touch-icon.png" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -29,6 +31,7 @@
     html {
       height: 100%;
       width: 100%;
+      overflow-x: hidden;
     }
 
     body {
@@ -48,6 +51,7 @@
       height: 100%;
       height: 100vh;
       height: -webkit-fill-available;
+      height: 100dvh;
       overflow: hidden;
     }
 
@@ -73,6 +77,10 @@
       flex: 1;
       text-align: center;
       padding: 0 44px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
     }
 
     /* ===== MENU TOGGLE (HAMBURGER) ===== */
@@ -132,7 +140,14 @@
       gap: 4px;
       flex-shrink: 0;
       z-index: 10;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
     }
+
+    .sidebar::-webkit-scrollbar { width: 5px; }
+    .sidebar::-webkit-scrollbar-track { background: transparent; }
+    .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 3px; }
 
     .sidebar-item {
       position: relative;
@@ -653,6 +668,14 @@
       font-weight: 600;
     }
 
+
+      .typing-text {
+  font-size: 14px;
+  margin-right: 6px;
+  opacity: 0.9;
+  transition: opacity 0.3s ease;
+}
+
     .ai-context-bar > span:first-child {
       overflow: hidden;
       text-overflow: ellipsis;
@@ -710,6 +733,15 @@
       color: #fff;
       align-self: flex-start;
       border-bottom-left-radius: 4px;
+    }
+
+    .msg-ai a {
+      color: #fff;
+      text-decoration: underline;
+    }
+
+    .msg-ai a:hover {
+      opacity: 0.85;
     }
 
     .msg-user {
@@ -906,6 +938,7 @@
         width: 100%;
         height: 100%;
         height: -webkit-fill-available;
+        height: 100dvh;
         margin: 0;
         border-radius: 0;
         z-index: 100;
@@ -1162,6 +1195,19 @@
       .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
   }
 
+  // Обрезает краткое содержание до 1-2 предложений (примерно 180 символов),
+  // стараясь не разрывать слово или предложение посередине.
+  function truncateSummary(text, maxLen = 180) {
+    const t = String(text ?? '').trim();
+    if (!t) return '';
+    if (t.length <= maxLen) return t;
+    const cut = t.slice(0, maxLen);
+    const sentenceEnd = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+    if (sentenceEnd > 40) return cut.slice(0, sentenceEnd + 1);
+    const lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trim() + '…';
+  }
+
   async function fetchJSON(url) {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -1184,6 +1230,46 @@
 
   async function loadArticleDetail(id) {
     return fetchJSON(`/api/articles/${id}`);
+  }
+
+  // Загружает весь список статей постранично (один раз) для клиентского поиска.
+  // Так поиск работает корректно и предсказуемо независимо от того, как
+  // (и работает ли вообще) параметр "q" обрабатывается на бэкенде.
+  async function loadSearchIndex() {
+    if (searchIndex) return searchIndex;
+    if (searchIndexLoading) return searchIndexLoading;
+
+    searchIndexLoading = (async () => {
+      const all = [];
+      let cursor = null;
+      for (let guard = 0; guard < 100; guard++) {
+        const p = new URLSearchParams();
+        p.set('limit', '50');
+        if (cursor) p.set('cursor', cursor);
+        const data = await fetchJSON(`/api/articles?${p.toString()}`);
+        (data.items || []).forEach(a => { articlesById[a.id] = a; all.push(a); });
+        cursor = data.next_cursor ?? null;
+        if (!cursor) break;
+      }
+      searchIndex = all;
+      return all;
+    })();
+
+    try {
+      return await searchIndexLoading;
+    } finally {
+      searchIndexLoading = null;
+    }
+  }
+
+  function matchesQuery(article, q) {
+    const needle = q.toLowerCase();
+    const haystacks = [
+      article.title,
+      article.summary,
+      ...(article.topics || []),
+    ];
+    return haystacks.some(v => String(v ?? '').toLowerCase().includes(needle));
   }
 
   // Сайдбар тем строится из реальных разделов БД (GET /api/themes).
@@ -1212,7 +1298,10 @@
   let searchQuery = '';
   let nextCursor = null;          // курсор пагинации (article_id) или null
   let isLoading = false;
+  let renderId = 0;
   const articlesById = {};        // id → карточка (для контекста чата)
+  let searchIndex = null;         // кэш всех статей для клиентского поиска (грузится один раз)
+  let searchIndexLoading = null;  // промис текущей загрузки индекса, чтобы не запускать параллельно
   let currentArticleId = null;
   let chatHistory = [];
   let isTyping = false;
@@ -1243,10 +1332,16 @@
   // ============================
   // RENDER
   // ============================
-  async function renderCards(reset = false) {
-    if (isLoading) return;
+
+
+    async function renderCards(reset = false) {
+    // Если идет загрузка и это НЕ сброс фильтров (например, подгрузка при скролле), то выходим
+    if (isLoading && !reset) return;
+
+    const myRenderId = ++renderId; // Увеличиваем счетчик и запоминаем его для этого запроса
     const grid = document.getElementById('newsGrid');
     const noResults = document.getElementById('noResults');
+    const q = searchQuery.trim();
 
     if (reset) {
       nextCursor = null;
@@ -1255,21 +1350,45 @@
 
     isLoading = true;
     try {
-      const data = await apiArticles(reset ? null : nextCursor);
-      (data.items || []).forEach(article => {
-        articlesById[article.id] = article;
-        grid.insertBefore(buildCard(article), noResults);
-      });
-      nextCursor = data.next_cursor ?? null;
+      if (q) {
+        const index = await loadSearchIndex();
+        // Проверяем, не устарел ли этот запрос (пока мы ждали, пользователь мог ввести новый текст)
+        if (myRenderId !== renderId) return;
+
+        if (searchQuery.trim() === q) {
+          const matches = index.filter(a => matchesQuery(a, q));
+          matches.forEach(article => {
+            grid.insertBefore(buildCard(article), noResults);
+          });
+          nextCursor = null;
+        }
+      } else {
+        const data = await apiArticles(reset ? null : nextCursor);
+        // Проверяем, не устарел ли этот запрос (пока мы ждали, пользователь мог снять/надеть фильтр)
+        if (myRenderId !== renderId) return;
+
+        (data.items || []).forEach(article => {
+          articlesById[article.id] = article;
+          grid.insertBefore(buildCard(article), noResults);
+        });
+        nextCursor = data.next_cursor ?? null;
+      }
     } catch {
       // сетевую ошибку игнорируем — ниже покажем noResults, если пусто
     } finally {
-      isLoading = false;
+      // Сбрасываем флаг загрузки только если это был самый последний (актуальный) запрос
+      if (myRenderId === renderId) {
+        isLoading = false;
+      }
     }
 
-    const hasCards = grid.querySelectorAll('.card').length > 0;
-    noResults.style.display = hasCards ? 'none' : 'block';
+    // Обновляем сообщение "Ничего не найдено" только для актуального запроса
+    if (myRenderId === renderId) {
+      const hasCards = grid.querySelectorAll('.card').length > 0;
+      noResults.style.display = hasCards ? 'none' : 'block';
+    }
   }
+
 
   function buildCard(article) {
     const card = document.createElement('div');
@@ -1290,7 +1409,7 @@
         <button class="btn btn-more" onclick="toggleExpand(${article.id}, this)">Подробнее</button>
       </div>
       <div class="card-expand" id="expand-${article.id}">
-        <p class="expand-body">${esc(article.summary)}</p>
+        <p class="expand-body">${esc(truncateSummary(article.summary))}</p>
         <a href="${esc(article.source)}" target="_blank" rel="noopener">
           Читать источник →
         </a>
@@ -1303,24 +1422,10 @@
   // ============================
   // EXPAND
   // ============================
-  async function toggleExpand(id, btn) {
+  function toggleExpand(id, btn) {
     const el = document.getElementById(`expand-${id}`);
     const isOpen = el.classList.toggle('open');
     btn.textContent = isOpen ? 'Свернуть' : 'Подробнее';
-
-    // Полный текст статьи подгружаем лениво при первом раскрытии.
-    if (isOpen && !el.dataset.loaded) {
-      el.dataset.loaded = '1';
-      const bodyEl = el.querySelector('.expand-body');
-      const prev = bodyEl.textContent;
-      bodyEl.textContent = 'Загрузка…';
-      try {
-        const detail = await loadArticleDetail(id);
-        bodyEl.textContent = detail.body || prev;
-      } catch {
-        bodyEl.textContent = prev;
-      }
-    }
   }
 
   // ============================
@@ -1505,6 +1610,19 @@
     fab.style.display = isOpen ? 'none' : '';
   }
 
+  function renderWithCitations(text, sources) {
+    const escaped = text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+    return escaped.replace(/\[(\d+)\]/g, (match, num) => {
+      const s = sources[parseInt(num)];
+      if (s && s.url && s.url.startsWith('http')) {
+        return `<a href="${s.url}" target="_blank" rel="noopener">[${num}]</a>`;
+      }
+      return match;
+    });
+  }
+
   function appendMessage(role, text) {
     const msgs = document.getElementById('aiMessages');
     const div = document.createElement('div');
@@ -1515,22 +1633,43 @@
     return div;
   }
 
-  function showTyping() {
+  let typingInterval = null;
+
+function showTyping() {
     const msgs = document.getElementById('aiMessages');
     const div = document.createElement('div');
     div.className = 'msg-typing';
     div.id = 'typingIndicator';
-    div.innerHTML = '<div class="dot-anim"></div><div class="dot-anim"></div><div class="dot-anim"></div>';
+    div.innerHTML = `
+      <span class="typing-text">Думаю</span>
+      <div class="dot-anim"></div>
+      <div class="dot-anim"></div>
+      <div class="dot-anim"></div>
+    `;
     msgs.appendChild(div);
     msgs.scrollTop = msgs.scrollHeight;
-  }
+
+    const phrases = ['Думаю', 'Ищу информацию', 'Анализирую', 'Формирую ответ'];
+    let idx = 0;
+    const textEl = div.querySelector('.typing-text');
+
+    clearInterval(typingInterval);
+    typingInterval = setInterval(() => {
+      idx = (idx + 1) % phrases.length;
+      textEl.textContent = phrases[idx];
+    }, 1500);
+}
 
   function removeTyping() {
     const el = document.getElementById('typingIndicator');
     if (el) el.remove();
-  }
+    if (typingInterval) {
+      clearInterval(typingInterval);
+      typingInterval = null;
+    }
+}
 
-  async function sendMessage() {
+    async function sendMessage() {
     const input = document.getElementById('aiInput');
     const text = input.value.trim();
     if (!text || isTyping) return;
@@ -1544,26 +1683,131 @@
     document.getElementById('aiSendBtn').disabled = true;
     showTyping();
 
+    const msgs = document.getElementById('aiMessages');
+    let msgDiv = null;              // создадим только когда придёт реальный контент
+    let thinkingShown = true;       // индикатор уже показан
+    let sourcesMap = {};            // id → {url, date}
+
     try {
       const article = articlesById[currentArticleId];
       const context = article ? `[Статья: ${article.title}]\n${article.summary}\n\n` : '';
       const query = context + text;
 
-      const resp = await fetch('/query', {
+      const resp = await fetch('/query/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, top_k: 5 }),
       });
 
-      removeTyping();
-
-      if (resp.ok) {
-        const data = await resp.json();
-        const answer = data.answer || 'Не удалось получить ответ.';
-        appendMessage('ai', answer);
-        chatHistory.push({ role: 'assistant', content: answer });
-      } else {
+      if (!resp.ok) {
         appendMessage('ai', 'Произошла ошибка при обращении к серверу. Попробуйте ещё раз.');
+        return;
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = '';
+      let rawContent = '';
+      let thinkEndIdx = -1;
+
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split('\n');
+        sseBuffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6);
+          if (payload === '[DONE]') break outer;
+
+          try {
+            const parsed = JSON.parse(payload);
+            if (parsed.error) {
+              removeTyping();
+              appendMessage('ai', 'Ошибка: ' + parsed.error);
+              break outer;
+            }
+
+            // === ИСТОЧНИКИ ===
+            if (parsed.sources) {
+              sourcesMap = {};
+              parsed.sources.forEach(s => { sourcesMap[s.id] = s; });
+              continue;
+            }
+
+            // === СТАТУСЫ ПАЙПЛАЙНА ===
+            if (parsed.status) {
+              const textEl = document.querySelector('#typingIndicator .typing-text');
+              if (textEl) {
+                clearInterval(typingInterval);
+                typingInterval = null;
+                textEl.textContent = parsed.status;
+              } else if (!thinkingShown) {
+                showTyping();
+                thinkingShown = true;
+              }
+              continue;
+            }
+
+            // === ЛОГИКА "ДУМАЮ" ===
+            const token = parsed.token || '';
+
+            // Случай 1: сервер прислал пустой пакет — он думает
+            if (!token || token.trim() === '') {
+              if (!thinkingShown) {
+                showTyping();
+                thinkingShown = true;
+              }
+              continue;
+            }
+
+            // Случай 2: токен есть, накапливаем
+            rawContent += token;
+
+            const hasClose = rawContent.includes('</think>');
+
+            // Вычисляем отображаемый контент
+            let display;
+            if (hasClose) {
+              // Убираем всё до </think> включительно (с или без открывающего тега)
+              display = rawContent.replace(/<think>[\s\S]*?<\/think>/, '')  // полный блок
+                                  .replace(/[\s\S]*?<\/think>/, '')          // без открывающего тега
+                                  .trimStart();
+            } else {
+              // </think> ещё не пришёл — скрываем всё (thinking in progress)
+              if (!thinkingShown) { showTyping(); thinkingShown = true; }
+              continue;
+            }
+
+            // Случай 3: реальный контент после </think>
+            if (thinkingShown) {
+              removeTyping();
+              thinkingShown = false;
+            }
+
+            if (!display) continue;
+
+            if (!msgDiv) {
+              msgDiv = appendMessage('ai', '');
+            }
+
+            msgDiv.innerHTML = renderWithCitations(display, sourcesMap);
+            msgs.scrollTop = msgs.scrollHeight;
+
+          } catch { /* skip malformed line */ }
+        }
+      }
+
+      // Если так и не убрали индикатор (сервер закончил, не дав ответа) — убираем
+      if (thinkingShown) {
+        removeTyping();
+      }
+
+      const finalText = msgDiv ? msgDiv.textContent : '';
+      if (finalText && finalText !== 'Анализирую...') {
+        chatHistory.push({ role: 'assistant', content: finalText });
       }
     } catch {
       removeTyping();
