@@ -45,3 +45,10 @@ class Theme(BaseModel):
 class Type(BaseModel):
     id: int
     name: str
+
+
+class Stats(BaseModel):
+    articles_total: int
+    articles_by_type: dict[str, int]
+    last_updated: Optional[str]
+    chunks_total: int

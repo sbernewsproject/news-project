@@ -7,13 +7,14 @@ REST-эндпоинты ленты новостей из Postgres.
   GET /api/types           — типы (Новость/Отзыв)
 """
 
+import asyncio
 from typing import Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query
 
 from api.db import get_pool
-from api.schemas import ArticleCard, ArticleDetail, ArticlesPage, Theme, Type
+from api.schemas import ArticleCard, ArticleDetail, ArticlesPage, Stats, Theme, Type
 from api.search import hybrid_search
 
 router = APIRouter(prefix="/api")
@@ -157,3 +158,24 @@ async def list_types() -> list[Type]:
     pool = get_pool()
     rows = await pool.fetch("SELECT types_id, types_name FROM types ORDER BY types_id")
     return [Type(id=r["types_id"], name=r["types_name"]) for r in rows]
+
+
+@router.get("/stats", response_model=Stats)
+async def stats() -> Stats:
+    pool = get_pool()
+    total, by_type, last_updated, chunks = await asyncio.gather(
+        pool.fetchval("SELECT count(*) FROM article"),
+        pool.fetch(
+            "SELECT t.types_name, count(a.article_id) AS cnt "
+            "FROM article a LEFT JOIN types t ON t.types_id = a.types_id "
+            "GROUP BY t.types_name"
+        ),
+        pool.fetchval("SELECT max(parsedate) FROM article"),
+        pool.fetchval("SELECT count(*) FROM chunk"),
+    )
+    return Stats(
+        articles_total=total,
+        articles_by_type={r["types_name"] or "—": r["cnt"] for r in by_type},
+        last_updated=str(last_updated)[:19] if last_updated else None,
+        chunks_total=chunks,
+    )
