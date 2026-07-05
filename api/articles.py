@@ -87,16 +87,14 @@ async def list_articles(
     if type is not None:
         params.append(type)
         conds.append(f"a.types_id = ${len(params)}")
+    theme_join = ""
     if theme:
         params.append(theme)
-        conds.append(
-            f"EXISTS (SELECT 1 FROM article_theme at2 "
-            f"WHERE at2.article_id = a.article_id AND at2.theme_id = ANY(${len(params)}::int[]))"
-        )
+        theme_join = f"JOIN article_theme at_f ON at_f.article_id = a.article_id AND at_f.theme_id = ANY(${len(params)}::int[])"
 
     where = (" WHERE " + " AND ".join(conds)) if conds else ""
     params.append(limit + 1)  # +1 чтобы понять, есть ли следующая страница
-    sql = _CARD_SELECT + where + f" ORDER BY a.article_id DESC LIMIT ${len(params)}"
+    sql = _CARD_SELECT + theme_join + where + f" ORDER BY a.article_id DESC LIMIT ${len(params)}"
 
     rows = await pool.fetch(sql, *params)
     next_cursor = None
