@@ -31,7 +31,7 @@ async def batch_embed_text(texts: list[str], *, timeout: float = 120.0) -> list[
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(
             f"{OLLAMA_URL}/api/embed",
-            json={"model": OLLAMA_EMBED_MODEL, "input": texts},
+            json={"model": OLLAMA_EMBED_MODEL, "input": texts, "keep_alive": "60m"},
         )
         resp.raise_for_status()
     return [_l2_normalize(e) for e in resp.json()["embeddings"]]
@@ -46,7 +46,7 @@ async def embed_query(query: str, *, timeout: float = 30.0) -> list[float]:
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(
             f"{OLLAMA_URL}/api/embed",
-            json={"model": OLLAMA_EMBED_MODEL, "input": f"{_QUERY_PREFIX}{query}"},
+            json={"model": OLLAMA_EMBED_MODEL, "input": f"{_QUERY_PREFIX}{query}", "keep_alive": "60m"},
         )
         resp.raise_for_status()
         embedding = resp.json()["embeddings"][0]
