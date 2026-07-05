@@ -25,12 +25,14 @@ _chain = None  # RAGChain, поднимается один раз на стар�
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _chain
-    from rag.chain import RAGChain
+    from rag.chain import RAGChain, init_pool, close_pool
+    await init_pool()
     _chain = RAGChain(
         qdrant_url=os.getenv("QDRANT_URL", "http://localhost:6333"),
         api_key=os.getenv("QDRANT_API_KEY"),
     )
     yield
+    await close_pool()
 
 
 app = FastAPI(title="news-rag", version="0.1.0", lifespan=lifespan)

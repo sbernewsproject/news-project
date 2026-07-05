@@ -30,6 +30,18 @@ TOP_N = 5
 SCORE_THRESHOLD = 0.5
 _RRF_K = 60
 
+_pool: asyncpg.Pool | None = None
+
+
+async def init_pool() -> None:
+    global _pool
+    _pool = await asyncpg.create_pool(POSTGRES_DSN, min_size=2, max_size=5)
+
+
+async def close_pool() -> None:
+    if _pool:
+        await _pool.close()
+
 # HyDE: генерирует гипотетический документ перед поиском.
 # Улучшает recall на сложных вопросах, но добавляет один LLM-вызов.
 # Включать после перехода на быструю модель (MoE/малую).
@@ -61,8 +73,7 @@ def _route(query: str) -> str:
 async def _fetch_chunks(chunk_ids: list[int]) -> list[dict]:
     if not chunk_ids:
         return []
-    conn = await asyncpg.connect(POSTGRES_DSN)
-    try:
+    async with _pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT chunk_id,
@@ -75,9 +86,7 @@ async def _fetch_chunks(chunk_ids: list[int]) -> list[dict]:
             """,
             chunk_ids,
         )
-        return [dict(r) for r in rows]
-    finally:
-        await conn.close()
+    return [dict(r) for r in rows]
 
 
 def _assemble_context(chunks: list[dict]) -> str:
@@ -106,8 +115,7 @@ def _rrf(*ranked_lists: list[int]) -> list[int]:
 
 async def _fts_search(query: str, limit: int) -> list[int]:
     try:
-        conn = await asyncpg.connect(POSTGRES_DSN)
-        try:
+        async with _pool.acquire() as conn:
             rows = await conn.fetch(
                 """
                 SELECT chunk_id
@@ -118,9 +126,7 @@ async def _fts_search(query: str, limit: int) -> list[int]:
                 query,
                 limit,
             )
-            return [r["chunk_id"] for r in rows]
-        finally:
-            await conn.close()
+        return [r["chunk_id"] for r in rows]
     except Exception:
         return []
 
