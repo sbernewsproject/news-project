@@ -1,4 +1,6 @@
+import math
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Optional
 
 from sentence_transformers import SentenceTransformer, CrossEncoder
@@ -144,5 +146,25 @@ class Reranker:
             return chunks
         pairs = [(query, c["text"]) for c in chunks]
         scores = self.model.predict(pairs).tolist()
-        ranked = sorted(zip(scores, chunks), key=lambda x: x[0], reverse=True)
-        return [c for _, c in ranked[:top_n]]
+
+        # Normalize cross-encoder scores to [0, 1] then blend with recency
+        min_s, max_s = min(scores), max(scores)
+        spread = max(max_s - min_s, 1e-9)
+        now = datetime.now(timezone.utc)
+        boosted = []
+        for score, chunk in zip(scores, chunks):
+            norm = (score - min_s) / spread
+            try:
+                pub_str = str(chunk.get("published_at") or "")
+                pub = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+                if pub.tzinfo is None:
+                    pub = pub.replace(tzinfo=timezone.utc)
+                age_days = max(0, (now - pub).days)
+                recency = math.exp(-age_days / 180)  # half-life ≈ 6 months
+            except Exception:
+                recency = 0.5
+            # 80% relevance + 20% recency — newer articles get meaningful boost
+            boosted.append((0.8 * norm + 0.2 * recency, chunk))
+
+        boosted.sort(key=lambda x: x[0], reverse=True)
+        return [c for _, c in boosted[:top_n]]

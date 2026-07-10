@@ -1279,7 +1279,7 @@
     let themes = [];
     try { themes = await fetchJSON('/api/themes'); } catch { themes = []; }
     sidebar.querySelectorAll('.sidebar-item').forEach(el => el.remove());
-    themes.forEach(t => {
+    themes.reverse().forEach(t => {
       const item = document.createElement('div');
       item.className = 'sidebar-item';
       item.dataset.topic = t.id;
@@ -1611,13 +1611,19 @@
   }
 
   function renderWithCitations(text, sources) {
-    const escaped = text
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br>');
-    return escaped.replace(/\[(\d+)\]/g, (match, num) => {
-      const s = sources[parseInt(num)];
-      if (s && s.url && s.url.startsWith('http')) {
-        return `<a href="${s.url}" target="_blank" rel="noopener">[${num}]</a>`;
+    let s = text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // Markdown: bold before italic to avoid mis-matching inner *
+    s = s
+      .replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/gs, '<em>$1</em>');
+    // Fix missing space between Russian letters and digits (e.g. "вырос5%")
+    s = s.replace(/([а-яёА-ЯЁ])(\d)/g, '$1 $2');
+    s = s.replace(/\n/g, '<br>');
+    return s.replace(/\[(\d+)\]/g, (match, num) => {
+      const src = sources[parseInt(num)];
+      if (src && src.url && src.url.startsWith('http')) {
+        return `<a href="${src.url}" target="_blank" rel="noopener">[${num}]</a>`;
       }
       return match;
     });
@@ -1673,6 +1679,13 @@ function showTyping() {
     const input = document.getElementById('aiInput');
     const text = input.value.trim();
     if (!text || isTyping) return;
+
+    // Защита от "расскажи подробнее" без предыдущего контекста
+    const _followUpRe = /^(расскажи|подробнее|поподробнее|расскажи\s+больше|расскажи\s+подробнее|продолжи|ещё|еще)$/i;
+    if (_followUpRe.test(text.trim()) && chatHistory.length === 0 && !currentArticleId) {
+      appendMessage('ai', 'Уточните запрос: нажмите «Спросить агента» на карточке конкретной новости или задайте вопрос, например «Что произошло с курсом рубля?»');
+      return;
+    }
 
     input.value = '';
     input.style.height = 'auto';
@@ -1800,9 +1813,18 @@ function showTyping() {
         }
       }
 
-      // Если так и не убрали индикатор (сервер закончил, не дав ответа) — убираем
+      // Убираем индикатор если ещё показан
       if (thinkingShown) {
         removeTyping();
+        thinkingShown = false;
+      }
+
+      // Если модель ответила без <think> (think:false или fallback-сообщение) —
+      // rawContent содержит ответ, но msgDiv так и не был создан в цикле
+      if (!msgDiv && rawContent.trim() && !rawContent.trimStart().startsWith('<think>')) {
+        msgDiv = appendMessage('ai', '');
+        msgDiv.innerHTML = renderWithCitations(rawContent.trim(), sourcesMap);
+        msgs.scrollTop = msgs.scrollHeight;
       }
 
       const finalText = msgDiv ? msgDiv.textContent : '';

@@ -10,6 +10,7 @@ import asyncio
 import json as _json
 import os
 import re
+from datetime import date as _date
 from typing import AsyncGenerator, Optional
 
 import asyncpg
@@ -47,12 +48,23 @@ async def close_pool() -> None:
 # Включать после перехода на быструю модель (MoE/малую).
 USE_HYDE = os.getenv("USE_HYDE", "false").lower() == "true"
 
-SYSTEM_PROMPT = """\
+_MONTHS_RU = [
+    "января","февраля","марта","апреля","мая","июня",
+    "июля","августа","сентября","октября","ноября","декабря",
+]
+
+
+def _make_system_prompt() -> str:
+    today = _date.today()
+    date_str = f"{today.day} {_MONTHS_RU[today.month - 1]} {today.year}"
+    return f"""\
 Ты — аналитик, создающий новостные сводки на русском языке.
+Сегодняшняя дата: {date_str}.
 Правила:
 - Используй ТОЛЬКО информацию из предоставленного контекста.
 - Не придумывай факты, цифры, имена.
-- Ссылайся на источники в формате [id] — число соответствует id тега <doc>.
+- При прочих равных предпочитай более свежие источники.
+- Ссылайся на источники в квадратных скобках, например [1], [2], [3] — число соответствует атрибуту id тега <doc>.
 - Если в контексте недостаточно данных, кратко объясни что именно не найдено — без домыслов.
 - Пиши кратко, структурированно, по-русски.
 - Если пользователь просит «расскажи подробнее», «подробнее», «расскажи больше» — дай краткий пересказ содержимого контекста без лишних деталей.
@@ -148,7 +160,7 @@ async def _hyde_vector(query: str) -> Optional[list[float]]:
                     "model": OLLAMA_MODEL,
                     "messages": [{"role": "user", "content": prompt}],
                     "stream": False,
-                    "think": False,
+                    "think": True,
                 },
             )
             resp.raise_for_status()
@@ -169,7 +181,7 @@ async def _generate(context: str, query: str) -> str:
                 json={
                     "model": OLLAMA_MODEL,
                     "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": _make_system_prompt()},
                         {"role": "user", "content": user_msg},
                     ],
                     "stream": False,
@@ -191,7 +203,7 @@ async def _generate_stream(context: str, query: str) -> AsyncGenerator[str, None
                 json={
                     "model": OLLAMA_MODEL,
                     "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": _make_system_prompt()},
                         {"role": "user", "content": user_msg},
                     ],
                     "stream": True,
