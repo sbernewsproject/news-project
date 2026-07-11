@@ -104,9 +104,16 @@ async def _fetch_chunks(chunk_ids: list[int]) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def _lost_in_middle_reorder(chunks: list[dict]) -> list[dict]:
+    """Размещает лучшие чанки на краях контекста, худшие в середине.
+    Эффект: LLM лучше запоминает начало и конец промта (Liu et al. 2023).
+    Пример для 5 чанков: позиции [rank1, rank3, rank5, rank4, rank2]."""
+    return chunks[::2] + chunks[1::2][::-1]
+
+
 def _assemble_context(chunks: list[dict]) -> str:
     parts = []
-    for i, c in enumerate(chunks, 1):
+    for i, c in enumerate(_lost_in_middle_reorder(chunks), 1):
         date_str = str(c.get("published_at", ""))[:10]
         parts.append(
             f'<doc id="{i}" source="{c["source"]}" date="{date_str}">\n'
